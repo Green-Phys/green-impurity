@@ -32,6 +32,14 @@ jobs:
           cd build;
           ctest -j1 --output-on-failure;
 
+  coverage:
+    needs: [build]
+    strategy:
+      fail-fast: false
+
+    runs-on: self-hosted
+
+    steps:
       - name: Run coverage
         run: |
           module load BuildEnv/gcc-12.2.0.lua;
@@ -40,6 +48,7 @@ jobs:
           lcov --remove coverage.info '/usr/*' --output-file coverage.info
           lcov --remove coverage.info '/opt/ohpc/pub/compiler/*' --output-file coverage.info
           lcov --remove coverage.info '*_deps*' --output-file coverage.info
+          lcov --remove coverage.info '*deps*' --output-file coverage.info
           lcov --remove coverage.info '*libs*' --output-file coverage.info
           lcov --list coverage.info
 
