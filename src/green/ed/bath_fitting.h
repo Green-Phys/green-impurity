@@ -167,7 +167,7 @@ namespace green::ed {
       optimizer.setObjective(function_error);
       // Set initial guess.
       Eigen::VectorXd initialGuess(ik);
-      for(size_t i = 0; i < ik ; ++i) {initialGuess(i) = initial_guess(i + shift);}
+      for (size_t i = 0; i < ik; ++i) initialGuess(i) = initial_guess(i + shift);
 
       // Start the optimization.
       auto result = optimizer.minimize(initialGuess);
@@ -181,6 +181,8 @@ namespace green::ed {
       // do something with final x-value
       std::cout << "Final xval: " << result.xval.transpose() << std::endl;
       std::copy(result.xval.data(), result.xval.data() + result.xval.size(), res.begin() + shift);
+      std::transform(res.begin() + shift, res.begin() + shift + bath_structure(io), res.begin() + shift,
+                     [](double x) { return std::abs(x); });
       shift += ik;
     }
 

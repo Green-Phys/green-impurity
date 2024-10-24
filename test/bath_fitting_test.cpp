@@ -9,6 +9,31 @@ using dtensor = green::ndarray::ndarray<double, N>;
 template <size_t N>
 using itensor = green::ndarray::ndarray<int, N>;
 
+bool compare_bath(const dtensor<1>& bath_1, const dtensor<1>& bath_2, const itensor<1>& bath_structure, double tol = 1e-5) {
+  size_t shift = 0;
+  for (size_t io = 0; io < bath_structure.shape()[0]; ++io) {
+    std::vector<std::pair<double, double>> bath1(bath_structure(io));
+    std::vector<std::pair<double, double>> bath2(bath_structure(io));
+    for (size_t i = 0; i < bath_structure(io); ++i) {
+      bath1[i] = {bath_1(shift + i), bath_1(shift + bath_structure(io) + i)};
+      bath2[i] = {bath_2(shift + i), bath_2(shift + bath_structure(io) + i)};
+    }
+    for (auto& x : bath1) {
+      for (size_t i = 0; i < bath2.size(); ++i) {
+        if (std::abs(x.first - bath2[i].first) < tol && std::abs(x.second - bath2[i].second) < tol) {
+          bath2.erase(bath2.begin() + i);
+          break;
+        }
+      }
+    }
+    if (!bath2.empty()) {
+      return false;
+    }
+    shift += bath_structure(io) * 2;
+  }
+  return true;
+}
+
 TEST_CASE("Bath Fitting") {
   SECTION("Test Single Orbital") {
     std::cout << "test leastsq" << std::endl;
@@ -43,7 +68,6 @@ TEST_CASE("Bath Fitting") {
           for (size_t i = 0; i < nk; ++i)
             hyb_fun(iw, is, io, io) += (bath(io * ik + i) * bath(io * ik + i)) / (freqs(iw) - bath(io * ik + nk + i));
         }
-        std::cout << freqs(iw).imag() << " " << hyb_fun(iw, 0, 0, 0).real() << " " << hyb_fun(iw, 0, 0, 0).imag() << std::endl;
       }
     }
     dtensor<1> initial_guess(4);
@@ -55,20 +79,20 @@ TEST_CASE("Bath Fitting") {
     initial_guess(3)         = 0.3;
 
     auto [new_hyb, new_bath] = green::ed::minimize(freqs, hyb_fun, initial_guess, bath_structure);
-    REQUIRE(std::equal(bath.begin(), bath.end(), new_bath.begin(), [](double a, double b) { return std::abs(a - b) < 1e-4; }));
+    REQUIRE(compare_bath(bath, new_bath, bath_structure));
   }
 
   SECTION("Test Two Orbital") {
     std::cout << "test leastsq" << std::endl;
-    double     beta = 10;
-    size_t     nw   = 400;
-    size_t     ns   = 1;
-    size_t     nio  = 2;
-    size_t     nb   = 10;
+    double beta = 10;
+    size_t nw   = 400;
+    size_t ns   = 1;
+    size_t nio  = 2;
+    size_t nb   = 10;
     // size_t     nk   = ik / 2;
     itensor<1> bath_structure(nio);
-    bath_structure(0)        = 2;
-    bath_structure(1)        = 3;
+    bath_structure(0) = 2;
+    bath_structure(1) = 3;
     ztensor<1> freqs(nw);
     ztensor<4> hyb_fun(nw, ns, nio, nio);
     dtensor<1> bath(nb);
@@ -117,13 +141,6 @@ TEST_CASE("Bath Fitting") {
     initial_guess(9)         = 0.8;
 
     auto [new_hyb, new_bath] = green::ed::minimize(freqs, hyb_fun, initial_guess, bath_structure);
-    // for (int iw = 0, in = -(nw / 2); iw < nw; ++iw, ++in) {
-    //   std::cout << freqs(iw).imag();
-    //   for (size_t io = 0; io < nio; ++io) {
-    //     std::cout << " " << new_hyb(iw, 0, io, io).real() << " " << new_hyb(iw, 0, io, io).imag();
-    //   }
-    //   std::cout << std::endl;
-    // }
-    REQUIRE(std::equal(bath.begin(), bath.end(), new_bath.begin(), [](double a, double b) { return std::abs(a - b) < 1e-4; }));
+    REQUIRE(compare_bath(bath, new_bath, bath_structure));
   }
 }
