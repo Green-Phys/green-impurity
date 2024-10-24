@@ -167,7 +167,7 @@ namespace green::ed {
       optimizer.setObjective(function_error);
       // Set initial guess.
       Eigen::VectorXd initialGuess(ik);
-      std::copy(initial_guess.begin() + shift, initial_guess.end() + ik, initialGuess.data());
+      for(size_t i = 0; i < ik ; ++i) {initialGuess(i) = initial_guess(i + shift);}
 
       // Start the optimization.
       auto result = optimizer.minimize(initialGuess);
