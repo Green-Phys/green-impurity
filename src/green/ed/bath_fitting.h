@@ -34,6 +34,8 @@ namespace green::ed {
   using ztensor = green::ndarray::ndarray<std::complex<double>, N>;
   template <size_t N>
   using dtensor = green::ndarray::ndarray<double, N>;
+  template <size_t N>
+  using itensor = green::ndarray::ndarray<int, N>;
 
   /**
    * @brief Implementation of the residual estimator for minimization of Hybridization function:
@@ -47,15 +49,18 @@ namespace green::ed {
     static constexpr bool ComputesJacobian = false;
 
     /// default constructor
-    hybridization_function_error() : _freqs(0), _target_delta(0, 0, 0, 0), _nw(0), _ns(0), _nio(0) {}
+    hybridization_function_error() : _freqs(0), _target_delta(0, 0, 0, 0), _bath_structure(0), _nw(0), _ns(0), _io(0) {}
 
     /**
      * Construct estimator for given frequency grid and hybridization function
      * @param freqs - Matsubara frequencies where hybridization function is defined
      * @param delta - Hybridization function
+     * @param bath_structure - structure of the bath for `io`-th orbital
+     * @param io - number of current orbital to minimize
      */
-    hybridization_function_error(const ztensor<1>& freqs, const ztensor<4>& delta) :
-        _freqs(freqs), _target_delta(delta), _nw(delta.shape()[0]), _ns(delta.shape()[1]), _nio(delta.shape()[2]) {}
+    hybridization_function_error(const ztensor<1>& freqs, const ztensor<4>& delta, const itensor<1>& bath_structure, size_t io) :
+        _freqs(freqs), _target_delta(delta), _bath_structure(bath_structure), _nw(delta.shape()[0]), _ns(delta.shape()[1]),
+        _io(io) {}
 
     /**
      * Calculate residual for a given bath parameters in xval vector and put it into a target function fval
@@ -66,29 +71,29 @@ namespace green::ed {
      */
     template <typename Scalar, int Inputs, int Outputs>
     void operator()(const Eigen::Matrix<Scalar, Inputs, 1>& xval, Eigen::Matrix<Scalar, Outputs, 1>& fval) const {
-      fval.resize(_nio);
-      size_t nk = (xval.size() / _nio) / 2;
-      size_t ik = xval.size() / _nio;
+      fval.resize(1);
+      // size_t nk = (xval.size() / _nio) / 2;
+      // size_t ik = xval.size() / _nio;
       double res(0);
-      for (size_t io = 0; io < _nio; ++io) {
-        for (size_t iw = 0; iw < _nw; ++iw) {
-          for (size_t is = 0; is < _ns; ++is) {
-            std::complex<double> hyb(0, 0);
-            for (size_t i = 0; i < nk; ++i)
-              hyb += (xval(ik * io + i) * xval(ik * io + i)) / (_freqs(iw) - xval(ik * io + nk + i));
-            res += std::abs(_target_delta(iw, is, io, io) - hyb);
-          }
+      size_t nk = _bath_structure(_io);
+      for (size_t iw = 0; iw < _nw; ++iw) {
+        for (size_t is = 0; is < _ns; ++is) {
+          std::complex<double> hyb(0, 0);
+          for (size_t i = 0; i < nk; ++i) hyb += (xval(i) * xval(i)) / (_freqs(iw) - xval(nk + i));
+          res = std::max(res, std::abs(_target_delta(iw, is, _io, _io) -
+                                       hyb));  // * std::sqrt(std::abs(_freqs(iw).imag()));// * std::abs(1. / _freqs(iw));
         }
-        fval(io) = res / _target_delta.size();
       }
+      fval(0) = res;  // _target_delta.size();
     }
 
   private:
     ztensor<1> _freqs;
     ztensor<4> _target_delta;
+    itensor<1> _bath_structure;
     size_t     _nw;
     size_t     _ns;
-    size_t     _nio;
+    size_t     _io;
   };
   /**
    * For a given bath patameters evaluate and return hybridization function
@@ -98,76 +103,89 @@ namespace green::ed {
    * @param ns - number of spins
    * @param nio - number of impurity orbitals
    */
-  ztensor<4> compute_hyb_fun(const ztensor<1>& freqs, const dtensor<1>& bath, size_t ns, size_t nio) {
+  inline ztensor<4> compute_hyb_fun(const ztensor<1>& freqs, const dtensor<1>& bath, const itensor<1>& bath_structure, size_t ns,
+                                    size_t nio) {
     ztensor<4> hyb(freqs.size(), ns, nio, nio);
-    size_t     nk = (bath.size() / nio) / 2;
-    size_t     ik = bath.size() / nio;
     for (size_t iw = 0; iw < freqs.size(); ++iw) {
       for (size_t is = 0; is < ns; ++is) {
+        size_t shift = 0;
         for (size_t io = 0; io < nio; ++io) {
+          size_t nk = bath_structure(io);
+          size_t ik = bath_structure(io) * 2;
           for (size_t i = 0; i < nk; ++i)
-            hyb(iw, is, io, io) += (bath(ik * io + i) * bath(ik * io + i)) / (freqs(iw) - bath(ik * io + nk + i));
+            hyb(iw, is, io, io) += (bath(shift + i) * bath(shift + i)) / (freqs(iw) - bath(shift + nk + i));
+          shift += ik;
         }
       }
     }
     return hyb;
   }
 
-  std::pair<ztensor<4>, dtensor<1>> minimize(const ztensor<1>& freqs, const ztensor<4>& hyb_fun,
-                                             const dtensor<1>& initial_guess) {
-    // There are DenseSVDSolver and DenseCholeskySolver available.
-    lsqcpp::GaussNewtonX<double, hybridization_function_error, lsqcpp::ArmijoBacktracking> optimizer;
-    // lsqcpp::LevenbergMarquardtX<double, HybridizationFunctionError/*, lsqcpp::ArmijoBacktracking*/> optimizer;
-    // lsqcpp::GradientDescentX<double, HybridizationFunctionError, lsqcpp::ArmijoBacktracking> optimizer;
+  /**
+   * For a given Hybridization function defiend on Matsubara frequency grid find discrete approximation and
+   * corresponding bath parameters using Gauss-Newton method
+   *
+   * @param freqs Matsubara frequency grid
+   * @param hyb_fun Hybridization function on Matsubara frequencies to be minimized
+   * @param initial_guess initial guess for bath parameters
+   * @param bath_structure 1d array with numbers of bath sites for each orbitals
+   * @return Discretized approximation of the Hybridization function and corresponding bath parameters
+   */
+  inline std::pair<ztensor<4>, dtensor<1>> minimize(const ztensor<1>& freqs, const ztensor<4>& hyb_fun,
+                                                    const dtensor<1>& initial_guess, const itensor<1>& bath_structure) {
+    dtensor<1> res(std::reduce(bath_structure.begin(), bath_structure.end()) * 2);
+    size_t     shift = 0;
+    for (size_t io = 0; io < hyb_fun.shape()[3]; ++io) {
+      // Create GaussNewton optimizer with dogleg method
+      lsqcpp::GaussNewtonX<double, hybridization_function_error, lsqcpp::DoglegMethod> optimizer;
+      // Set number of iterations as stop criterion.
+      // Set it to 0 or negative for infinite iterations (default is 0).
+      optimizer.setMaximumIterations(30000);
+      // Set the minimum length of the gradient.
+      // The optimizer stops minimizing if the gradient length falls below this
+      // value.
+      // Set it to 0 or negative to disable this stop criterion (default is 1e-9).
+      optimizer.setMinimumGradientLength(1e-8);
+      // Set the minimum length of the step.
+      // The optimizer stops minimizing if the step length falls below this
+      // value.
+      // Set it to 0 or negative to disable this stop criterion (default is 1e-9).
+      optimizer.setMinimumStepLength(1e-9);
+      // Set the minimum least squares error.
+      // The optimizer stops minimizing if the error falls below this
+      // value.
+      // Set it to 0 or negative to disable this stop criterion (default is 0).
+      optimizer.setMinimumError(1e-14);
+      // Set the parameters of the step refiner (Dogleg Method).
+      optimizer.setRefinementParameters({1.0, 2.0, 1e-6, 0.001, 100});
 
-    optimizer.setObjective(hybridization_function_error(freqs, hyb_fun));
+      // Turn verbosity on, so the optimizer prints status updates after each
+      // iteration.
+      optimizer.setVerbosity(0);
+      size_t                       ik = bath_structure(io) * 2;
+      hybridization_function_error function_error(freqs, hyb_fun, bath_structure, io);
+      optimizer.setObjective(function_error);
+      // Set initial guess.
+      Eigen::VectorXd initialGuess(ik);
+      std::copy(initial_guess.begin() + shift, initial_guess.end() + ik, initialGuess.data());
 
-    // Set number of iterations as stop criterion.
-    // Set it to 0 or negative for infinite iterations (default is 0).
-    optimizer.setMaximumIterations(10000);
-    // Set the minimum length of the gradient.
-    // The optimizer stops minimizing if the gradient length falls below this
-    // value.
-    // Set it to 0 or negative to disable this stop criterion (default is 1e-9).
-    optimizer.setMinimumGradientLength(1e-8);
-    // Set the minimum length of the step.
-    // The optimizer stops minimizing if the step length falls below this
-    // value.
-    // Set it to 0 or negative to disable this stop criterion (default is 1e-9).
-    optimizer.setMinimumStepLength(1e-9);
+      // Start the optimization.
+      auto result = optimizer.minimize(initialGuess);
 
-    // Set the minimum least squares error.
-    // The optimizer stops minimizing if the error falls below this
-    // value.
-    // Set it to 0 or negative to disable this stop criterion (default is 0).
-    optimizer.setMinimumError(1e-14);
+      std::cout << "Done! Converged: " << (result.converged ? "true" : "false") << " Iterations: " << result.iterations
+                << std::endl;
 
-    // Set the parameters of the step refiner (Armijo Backtracking).
-    optimizer.setRefinementParameters({0.8, 1e-4, 1e-10, 1.0, 0});
+      // do something with final function value
+      std::cout << "Final fval: " << result.fval.transpose() << std::endl;
 
-    // Turn verbosity on, so the optimizer prints status updates after each
-    // iteration.
-    optimizer.setVerbosity(0);
+      // do something with final x-value
+      std::cout << "Final xval: " << result.xval.transpose() << std::endl;
+      std::copy(result.xval.data(), result.xval.data() + result.xval.size(), res.begin() + shift);
+      shift += ik;
+    }
 
-    // Set initial guess.
-    Eigen::VectorXd initialGuess(initial_guess.size());
-    std::copy(initial_guess.begin(), initial_guess.end(), initialGuess.data());
-
-    // Start the optimization.
-    auto result = optimizer.minimize(initialGuess);
-
-    std::cout << "Done! Converged: " << (result.converged ? "true" : "false") << " Iterations: " << result.iterations
-              << std::endl;
-
-    // do something with final function value
-    std::cout << "Final fval: " << result.fval.transpose() << std::endl;
-
-    // do something with final x-value
-    std::cout << "Final xval: " << result.xval.transpose() << std::endl;
-    dtensor<1> res(result.xval.size());
-    std::copy(result.xval.data(), result.xval.data() + result.xval.size(), res.begin());
-    compute_hyb_fun(freqs, res, hyb_fun.shape()[1], hyb_fun.shape()[2]);
-    return std::make_pair(compute_hyb_fun(freqs, res, hyb_fun.shape()[1], hyb_fun.shape()[2]), res);
+    compute_hyb_fun(freqs, res, bath_structure, hyb_fun.shape()[1], hyb_fun.shape()[2]);
+    return std::make_pair(compute_hyb_fun(freqs, res, bath_structure, hyb_fun.shape()[1], hyb_fun.shape()[2]), res);
   }
 
 }  // namespace green::ed
