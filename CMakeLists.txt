@@ -9,6 +9,8 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 include(GreenDeps)
 
 add_green_dependency(green-ndarray)
+add_green_dependency(green-symmetry)
+add_green_dependency(green-grids)
 find_package(Eigen3 REQUIRED)
 
 add_subdirectory(deps)

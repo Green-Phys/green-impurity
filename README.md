@@ -1,7 +1,7 @@
-# green-ed
-Wrapper for the Exact Diagonalization impurity solver.
+# green-impurity
+Wrapper for the impurity solver.
 
-In addition to running impurity solver it also perform bath fitting routine.
+In addition to running impurity solver it also perform bath fitting routine if needed.
 
 # Acknowledgements
 
