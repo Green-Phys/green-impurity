@@ -1,6 +1,6 @@
-project(ed)
+project(impurity)
 
-add_library(ed INTERFACE)
+add_library(impurity INTERFACE)
 include_directories(.)
-target_include_directories(ed INTERFACE .)
-target_link_libraries(ed INTERFACE GREEN::NDARRAY GREEN::GRIDS GREEN::SYMMETRY lsqcpp::lsqcpp)
+target_include_directories(impurity INTERFACE .)
+target_link_libraries(impurity INTERFACE GREEN::NDARRAY GREEN::GRIDS GREEN::SYMMETRY lsqcpp::lsqcpp)

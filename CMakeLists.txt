@@ -16,7 +16,7 @@ find_package(Eigen3 REQUIRED)
 add_subdirectory(deps)
 add_subdirectory(src)
 
-add_library(GREEN::ED ALIAS ed)
+add_library(GREEN::IMPURITY ALIAS impurity)
 
 option(Build_Tests "Build tests" ON)
 if (Build_Tests)
