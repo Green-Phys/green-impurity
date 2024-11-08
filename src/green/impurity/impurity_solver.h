@@ -234,7 +234,7 @@ namespace green::impurity {
     }
     std::system((_impurity_solver_exec + " " + _impurity_solver_params + " --NSITES=" + std::to_string(nio + nb) +
                  " --NSPINS=" + std::to_string(2) + " --INPUT_FILE=" + _root + "/ed." + std::to_string(imp_n) + ".input.h5" +
-                 " --OUTPUT_FILE=" + _root + "/ed." + std::to_string(imp_n) + ".result.h5" +
+                 " --OUTPUT_FILE=" + _root + "/ed." + std::to_string(imp_n) + ".result.h5" + " --arpack.SECTOR=false"
                  " --siam.NORBITALS=" + std::to_string(nio) + " --spinstorage.ORBITAL_NUMBER=" + std::to_string(nio) +
                  " --lanc.BETA=" + std::to_string(_ft.sd().beta()))
                     .c_str());
