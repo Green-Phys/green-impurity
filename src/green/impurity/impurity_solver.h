@@ -172,18 +172,21 @@ namespace green::impurity {
         Vk.push_back(Vk_);
       }
     }
-    ztensor<4>    G0_imp(delta_out.shape());
+    ztensor<4> G0_imp(delta_out.shape());
     for (size_t iw = 0; iw < delta_out.shape()[0]; ++iw) {
       for (size_t is = 0; is < ns; ++is) {
         auto g_inv_w_imp = matrix(ovlp(is)) * (_ft.wsample_fermi()(iw) * 1.0i + mu) - matrix(h_core(is)) - matrix(sigma_inf(is)) -
                            matrix(sigma_w(iw, is)) - matrix(delta_out(iw, is));
-        auto g_inv_w_loc      = matrix(g_w(iw, is)).inverse().eval();
-        auto xxx              = g_inv_w_imp.inverse().eval();
+        auto g_inv_w_loc       = matrix(g_w(iw, is)).inverse().eval();
+        auto xxx               = g_inv_w_imp.inverse().eval();
         matrix(G0_imp(iw, is)) = xxx;
       }
     }
+    if (!std::filesystem::exists(_root)) {
+      std::filesystem::create_directory(_root);
+    }
     h5pp::archive data(_root + "/ed." + std::to_string(imp_n) + ".input.h5", "w");
-    data["freq"] <<_ft.wsample_fermi();
+    data["freq"] << _ft.wsample_fermi();
     data["G_imp/data"] << G0_imp;
     data["G_imp/data_in"] << g_w;
     data["Delta/data"] << delta_out;
@@ -229,9 +232,14 @@ namespace green::impurity {
       }
       data["GreensFunction_orbitals/values"] << orbitals;
     }
-    std::system((_impurity_solver_exec + " " + _impurity_solver_params + " --imp_n=" + std::to_string(imp_n)).c_str());
-    if (std::filesystem::exists(_root + "/result." + std::to_string(imp_n) + ".h5")) {
-      h5pp::archive ar(_root + "/result." + std::to_string(imp_n) + ".h5");
+    std::system((_impurity_solver_exec + " " + _impurity_solver_params + " --NSITES=" + std::to_string(nio + nb) +
+                 " --NSPINS=" + std::to_string(2) + " --INPUT_FILE=" + _root + "/ed." + std::to_string(imp_n) + ".input.h5" +
+                 " --OUTPUT_FILE=" + _root + "/ed." + std::to_string(imp_n) + ".result.h5" +
+                 " --siam.NORBITALS=" + std::to_string(nio) + " --spinstorage.ORBITAL_NUMBER=" + std::to_string(nio) +
+                 " --lanc.BETA=" + std::to_string(_ft.sd().beta()))
+                    .c_str());
+    if (std::filesystem::exists(_root + "/ed." + std::to_string(imp_n) + ".result.h5")) {
+      h5pp::archive ar(_root + "/ed." + std::to_string(imp_n) + ".result.h5");
       ar["Sigma_inf"] >> sigma_inf_new;
       ar["Sigma_w"] >> sigma_new;
     } else {
@@ -286,11 +294,28 @@ namespace green::impurity {
     fff["restricted"] << false;
     fff.close();
 
-    std::system((_dc_solver_exec + " " + _dc_solver_params + " --imp_n=" + std::to_string(imp_n)).c_str());
-    if (std::filesystem::exists(_root + "/result.dc." + std::to_string(imp_n) + ".h5")) {
-      h5pp::archive ar(_root + "/result.dc." + std::to_string(imp_n) + ".h5");
-      ar["Sigma_inf"] >> sigma_inf_new;
-      ar["Sigma_w"] >> sigma_new;
+    std::system((_dc_solver_exec + " " + _dc_solver_params + " --imp_n=" + std::to_string(imp_n) + " --maxiter " +
+                 std::to_string(1) + " --unrestricted" + " --mode GW" + " --repr ir" + " --ncoeff " +
+                 std::to_string(_ft.sd().repn_fermi().nts() - 2) + " --beta " + std::to_string(_ft.sd().beta()) + " --hf-input " +
+                 _root + "/dc." + std::to_string(imp_n) + ".input.h5" + " --output" + _root + "/dc." + std::to_string(imp_n) +
+                 ".result.h5")
+                    .c_str());
+    if (std::filesystem::exists(_root + "/dc." + std::to_string(imp_n) + ".result.h5")) {
+      h5pp::archive ar(_root + "/dc." + std::to_string(imp_n) + ".result.h5");
+      for (size_t is = 0; is < 2; ++is) {
+        dtensor<2> sigma_1_;
+        dtensor<3> sigma_t_;
+        ar["output/sigma1/" + std::to_string(is + 1)] >> sigma_1_;
+        ar["output/sigma2/" + std::to_string(is + 1)] >> sigma_t_;
+        sigma_inf_new(is) += ndarray::transpose(sigma_1_, "ji->ij");
+        dtensor<3> xxx = ndarray::transpose(sigma_t_, "jix->tij");
+        for (size_t it = 1; it < sigma_new.shape()[0]; ++it) {
+          sigma_new(it, is) << xxx(it);
+        }
+      }
+      ztensor<4> sigma_w_(_ft.sd().repn_fermi().nw(), ns, naso, naso);
+      _ft.tau_to_omega(sigma_new, sigma_w_);
+      _ft.omega_to_tau(sigma_w_, sigma_new);
       ar.close();
     } else {
       std::cerr << "Double counting result file has not been found" << std::endl;
