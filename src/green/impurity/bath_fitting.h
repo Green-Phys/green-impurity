@@ -65,8 +65,7 @@ namespace green::impurity {
     static constexpr bool ComputesJacobian = false;
 
     /// default constructor
-    hybridization_function_error() :
-        _freqs(0), _target_delta(0, 0, 0, 0), _bath_structure(0), _nw(0), _io(0), _is(0) {}
+    hybridization_function_error() : _freqs(0), _target_delta(0, 0, 0, 0), _bath_structure(0), _nw(0), _io(0), _is(0) {}
 
     /**
      * Construct estimator for given frequency grid and hybridization function
@@ -76,9 +75,9 @@ namespace green::impurity {
      * @param io - number of current orbital to minimize
      */
     hybridization_function_error(const ztensor<1>& freqs, const ztensor<4>& delta, const itensor<1>& bath_structure, size_t io,
-                                 size_t is) :
-        _freqs(freqs), _target_delta(delta), _bath_structure(bath_structure), _nw(delta.shape()[0]),
-        _io(io), _is(is) {}
+                                 size_t is, int type = 3) :
+        _freqs(freqs), _target_delta(delta), _bath_structure(bath_structure), _nw(delta.shape()[0]), _io(io), _is(is),
+        _type(type) {}
 
     /**
      * Calculate residual for a given bath parameters in xval vector and put it into a target function fval
@@ -95,21 +94,48 @@ namespace green::impurity {
       double res(0);
       size_t nk = _bath_structure(_io);
       for (size_t iw = 0; iw < _nw; ++iw) {
-        std::complex<double> hyb(0, 0);
-        for (size_t i = 0; i < nk; ++i) hyb += (xval(i) * xval(i)) / (_freqs(iw) - xval(nk + i));
-        res = std::max(res, std::abs(_freqs(iw).imag()) < 40 ? std::abs(_target_delta(iw, _is, _io, _io) - hyb) : 0.0);
-        // * std::sqrt(std::abs(_freqs(iw).imag()));// * std::abs(1. / _freqs(iw));
+        if (_type == 1) {
+          type_1(res, xval, iw, nk);
+        } else if (_type == 2) {
+          type_2(res, xval, iw, nk);
+        } else if (_type == 3) {
+          type_3(res, xval, iw, nk);
+        }
       }
       fval(0) = res;  // _target_delta.size();
     }
 
   private:
+    template <typename Scalar, int Inputs>
+    void type_1(double& res, const Eigen::Matrix<Scalar, Inputs, 1>& xval, size_t iw, size_t nk) const {
+      if (std::abs(_freqs(iw).imag()) > 5.0) return;
+      std::complex<double> hyb(0, 0);
+      for (size_t i = 0; i < nk; ++i) hyb += (xval(i) * xval(i)) / (_freqs(iw) - xval(nk + i));
+      res += std::max(0.0, std::abs(_target_delta(iw, _is, _io, _io) - hyb));
+    }
+
+    template <typename Scalar, int Inputs>
+    void type_2(double& res, const Eigen::Matrix<Scalar, Inputs, 1>& xval, size_t iw, size_t nk) const {
+      if (std::abs(_freqs(iw).imag()) > 5.0) return;
+      std::complex<double> hyb(0, 0);
+      for (size_t i = 0; i < nk; ++i) hyb += (xval(i) * xval(i)) / (_freqs(iw) - xval(nk + i));
+      res = std::max(res, std::abs(_target_delta(iw, _is, _io, _io) - hyb));
+    }
+
+    template <typename Scalar, int Inputs>
+    void type_3(double& res, const Eigen::Matrix<Scalar, Inputs, 1>& xval, size_t iw, size_t nk) const {
+      std::complex<double> hyb(0, 0);
+      for (size_t i = 0; i < nk; ++i) hyb += (xval(i) * xval(i)) / (_freqs(iw) - xval(nk + i));
+      res = std::max(res, std::abs(_target_delta(iw, _is, _io, _io) - hyb));
+    }
+
     ztensor<1> _freqs;
     ztensor<4> _target_delta;
     itensor<1> _bath_structure;
     size_t     _nw;
     size_t     _io;
     size_t     _is;
+    int        _type;
   };
   /**
    * For a given bath patameters evaluate and return hybridization function
@@ -149,16 +175,18 @@ namespace green::impurity {
    * @return Discretized approximation of the Hybridization function and corresponding bath parameters
    */
   inline std::pair<ztensor<4>, dtensor<2>> minimize(const ztensor<1>& freqs, const ztensor<4>& hyb_fun,
-                                                    const dtensor<2>& initial_guess, const itensor<1>& bath_structure) {
+                                                    const dtensor<2>& initial_guess, const itensor<1>& bath_structure,
+                                                    int type = 3) {
     size_t     ns = hyb_fun.shape()[1];
     dtensor<2> res(ns, std::reduce(bath_structure.begin(), bath_structure.end()) * 2);
     for (size_t is = 0; is < hyb_fun.shape()[1]; ++is) {
-      std::cout<<"spin "<<is<<std::endl;
-      size_t     shift = 0;
+      std::cout << "spin " << is << std::endl;
+      size_t shift = 0;
       for (size_t io = 0; io < hyb_fun.shape()[3]; ++io) {
-        std::cout<<"orbital "<<io<<std::endl;
+        std::cout << "orbital " << io << std::endl;
         // Create GaussNewton optimizer with dogleg method
         lsqcpp::GaussNewtonX<double, hybridization_function_error, lsqcpp::DoglegMethod> optimizer;
+        // lsqcpp::LevenbergMarquardtX<double, hybridization_function_error> optimizer;
         // Set number of iterations as stop criterion.
         // Set it to 0 or negative for infinite iterations (default is 0).
         optimizer.setMaximumIterations(40000);
@@ -179,18 +207,19 @@ namespace green::impurity {
         optimizer.setMinimumError(1e-14);
         // Set the parameters of the step refiner (Dogleg Method).
         optimizer.setRefinementParameters({1.0, 3.0, 1e-6, 0.001, 100});
+        // optimizer.setRefinementParameters({0.001});
 
         // Turn verbosity on, so the optimizer prints status updates after each
         // iteration.
         optimizer.setVerbosity(0);
         size_t                       ik = bath_structure(io) * 2;
-        hybridization_function_error function_error(freqs, hyb_fun, bath_structure, io, is);
+        hybridization_function_error function_error(freqs, hyb_fun, bath_structure, io, is, type);
         optimizer.setObjective(function_error);
         // Set initial guess.
         Eigen::VectorXd initialGuess(ik);
         for (size_t i = 0; i < ik; ++i) initialGuess(i) = initial_guess(is, i + shift);
 
-        std::cout<<"Initial guess: "<< initialGuess.transpose()<<std::endl;
+        std::cout << "Initial guess: " << initialGuess.transpose() << std::endl;
         // Start the optimization.
         auto result = optimizer.minimize(initialGuess);
 

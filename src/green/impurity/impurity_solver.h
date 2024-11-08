@@ -139,7 +139,7 @@ namespace green::impurity {
     ztensor<4> sigma_new(sigma_w.shape());
     auto [delta_1, delta_w] = extract_delta(mu, ovlp, h_core, sigma_inf, sigma_w, g_w);
     auto [delta_out, bath_arr] =
-        minimize(_ft.sd().repn_fermi().wsample() * 1.0i, delta_w, _initial_bath[imp_n], _bath_structure[imp_n]);
+        minimize(_ft.sd().repn_fermi().wsample() * 1.0i, delta_w, _initial_bath[imp_n], _bath_structure[imp_n], 1);
     {
       std::ofstream ofile(_root + "/bath.dat", std::ios_base::out);
       for (auto b : bath_arr) {
@@ -173,9 +173,21 @@ namespace green::impurity {
       }
     }
     ztensor<4>    G0_imp(delta_out.shape());
+    for (size_t iw = 0; iw < delta_out.shape()[0]; ++iw) {
+      for (size_t is = 0; is < ns; ++is) {
+        auto g_inv_w_imp = matrix(ovlp(is)) * (_ft.wsample_fermi()(iw) * 1.0i + mu) - matrix(h_core(is)) - matrix(sigma_inf(is)) -
+                           matrix(sigma_w(iw, is)) - matrix(delta_out(iw, is));
+        auto g_inv_w_loc      = matrix(g_w(iw, is)).inverse().eval();
+        auto xxx              = g_inv_w_imp.inverse().eval();
+        matrix(G0_imp(iw, is)) = xxx;
+      }
+    }
     h5pp::archive data(_root + "/ed." + std::to_string(imp_n) + ".input.h5", "w");
-    data["G0_imp/data"] << G0_imp;
+    data["freq"] <<_ft.wsample_fermi();
+    data["G_imp/data"] << G0_imp;
+    data["G_imp/data_in"] << g_w;
     data["Delta/data"] << delta_out;
+    data["Delta/data_in"] << delta_w;
 
     itensor<2> sectors(1, 2);
     sectors(0, 0) = 0;
@@ -232,7 +244,7 @@ namespace green::impurity {
                                         const ztensor<4>& g_w) const {
     ztensor<3>    sigma_inf_new(sigma_inf.shape());
     ztensor<4>    sigma_new(sigma_w.shape());
-    h5pp::archive fff(_root + "/G_tau_loc.h5", "w");
+    h5pp::archive fff(_root + "/dc." + std::to_string(imp_n) + ".input.h5", "w");
     size_t        ns      = ovlp.shape()[0];
     size_t        naso    = ovlp.shape()[0];
 
@@ -309,7 +321,7 @@ namespace green::impurity {
     // extract constant shoft in delta
     delta_1                        = delta(nw - 1) -
               ((delta(nw - 1) - delta(nw - 2)) / ((inv_w_m_1 * inv_w_m_1) - (inv_w_m_2 * inv_w_m_2)) / (inv_w_m_2 * inv_w_m_2));
-    for (size_t iw = 0; iw < nw; ++iw) delta(iw) -= delta_1;
+    // for (size_t iw = 0; iw < nw; ++iw) delta(iw) -= delta_1;
 
     return std::make_tuple(delta_1, delta);
   }
