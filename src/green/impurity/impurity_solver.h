@@ -135,6 +135,9 @@ namespace green::impurity {
   inline auto impurity_solver::solve_imp(size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
                                          const dtensor<4>& interaction, const ztensor<3>& sigma_inf, const ztensor<4>& sigma_w,
                                          const ztensor<4>& g_w) const {
+    if (!std::filesystem::exists(_root)) {
+      std::filesystem::create_directory(_root);
+    }
     ztensor<3> sigma_inf_new(sigma_inf.shape());
     ztensor<4> sigma_new(sigma_w.shape());
     auto [delta_1, delta_w] = extract_delta(mu, ovlp, h_core, sigma_inf, sigma_w, g_w);
@@ -181,9 +184,6 @@ namespace green::impurity {
         auto xxx               = g_inv_w_imp.inverse().eval();
         matrix(G0_imp(iw, is)) = xxx;
       }
-    }
-    if (!std::filesystem::exists(_root)) {
-      std::filesystem::create_directory(_root);
     }
     h5pp::archive data(_root + "/ed." + std::to_string(imp_n) + ".input.h5", "w");
     data["freq"] << _ft.wsample_fermi();
