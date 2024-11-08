@@ -294,7 +294,7 @@ namespace green::impurity {
     fff["restricted"] << false;
     fff.close();
 
-    std::system((_dc_solver_exec + " " + _dc_solver_params + " --imp_n=" + std::to_string(imp_n) + " --maxiter " +
+    std::system((_dc_solver_exec + " " + _dc_solver_params + " --maxiter " +
                  std::to_string(1) + " --unrestricted" + " --mode GW" + " --repr ir" + " --ncoeff " +
                  std::to_string(_ft.sd().repn_fermi().nts() - 2) + " --beta " + std::to_string(_ft.sd().beta()) + " --hf-input " +
                  _root + "/dc." + std::to_string(imp_n) + ".input.h5" + " --output" + _root + "/dc." + std::to_string(imp_n) +
