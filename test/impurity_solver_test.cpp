@@ -62,14 +62,21 @@ TEST_CASE("Impurity Solver") {
   green::params::params p;
   green::symmetry::define_parameters(p);
   green::grids::define_parameters(p);
+  p.define<bool>("spin_symm", "", false);
+  p.define<std::string>("bath_file", "", bath_file);
+  p.define<std::string>("impurity_solver_exec", "", "/bin/true");
+  p.define<std::string>("impurity_solver_params", "", "");
+  p.define<std::string>("dc_solver_exec", "", "/bin/true");
+  p.define<std::string>("dc_solver_params", "", "");
+  p.define<std::string>("seet_root_dir", "", TEST_PATH + ""s);
+  p.define<std::string>("seet_input", "", input_file);
+
   p.parse("test --BETA 100 --grid_file " + grid_file + " --input_file " + weak_input_file );
 
   green::grids::transformer_t ft(p);
   green::impurity::bz_utils_t bz_utils(p);
 
-  green::impurity::impurity_solver solver(input_file, bath_file, "/bin/true",
-                    "", "/bin/true",
-                    "", TEST_PATH + ""s, ft, bz_utils);
+  green::impurity::impurity_solver solver(p, ft, bz_utils);
   green::impurity::ztensor<4> sigma1_k;
   green::impurity::ztensor<5> sigma_k;
   green::impurity::ztensor<5> g_k;
