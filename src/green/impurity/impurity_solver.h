@@ -24,6 +24,7 @@
 
 #include <green/grids/transformer_t.h>
 #include <green/ndarray/ndarray_math.h>
+#include <green/params/params.h>
 #include <green/symmetry/symmetry.h>
 
 #include <tuple>
@@ -67,17 +68,16 @@ namespace green::impurity {
   class ed_impurity_solver {
   public:
     ed_impurity_solver(const std::string& input_file, const std::string& bath_file, const std::string& impurity_solver_exec,
-                       const std::string& impurity_solver_params, const std::string& dc_solver_exec,
-                       const std::string& dc_solver_params, const std::string& root) :
+                       const std::string& impurity_solver_params, const std::string& root) :
         _input_file(input_file),
-        _impurity_solver_exec(impurity_solver_exec), _impurity_solver_params(impurity_solver_params),
-        _dc_solver_exec(dc_solver_exec), _dc_solver_params(dc_solver_params), _root(root) {
+        _impurity_solver_exec(impurity_solver_exec), _impurity_solver_params(impurity_solver_params), _root(root) {
       size_t        ns = 2;
+      size_t        nimp;
       h5pp::archive ar(input_file, "r");
-      ar["nimp"] >> _nimp;
+      ar["nimp"] >> nimp;
       ar.close();
       std::ifstream ff(bath_file);
-      for (size_t imp = 0; imp < _nimp; ++imp) {
+      for (size_t imp = 0; imp < nimp; ++imp) {
         std::vector<double> bath;
         std::vector<int>    bath_structure;
         size_t              nio, nbo;
@@ -105,9 +105,9 @@ namespace green::impurity {
     }
 
     auto solve(size_t imp_n, const grids::transformer_t& _ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
-               const ztensor<4>& delta_w, const dtensor<4>& interaction, const ztensor<4>& g_w) const {
-      ztensor<3> sigma_inf_new;
-      ztensor<4> sigma_new;
+               const ztensor<3>& delta_1, const ztensor<4>& delta_w, const dtensor<4>& interaction, const ztensor<4>& g_w) const {
+      ztensor<3> sigma_inf_new(delta_1.shape());
+      ztensor<4> sigma_new(delta_w.shape());
       auto [delta_out, bath_arr] =
           minimize(_ft.sd().repn_fermi().wsample() * 1.0i, delta_w, _initial_bath[imp_n], _bath_structure[imp_n], 1);
       {
@@ -142,75 +142,80 @@ namespace green::impurity {
           Vk.push_back(Vk_);
         }
       }
-      ztensor<4> G0_imp(delta_out.shape());
+      ztensor<4> g0_imp(delta_out.shape());
       for (size_t iw = 0; iw < delta_out.shape()[0]; ++iw) {
         for (size_t is = 0; is < ns; ++is) {
           auto g_inv_w_imp =
               matrix(ovlp(is)) * (_ft.wsample_fermi()(iw) * 1.0i + mu) - matrix(h_core(is)) - matrix(delta_out(iw, is));
           auto g_inv_w_loc       = matrix(g_w(iw, is)).inverse().eval();
           auto xxx               = g_inv_w_imp.inverse().eval();
-          matrix(G0_imp(iw, is)) = xxx;
+          matrix(g0_imp(iw, is)) = xxx;
         }
       }
-      h5pp::archive data(_root + "/ed." + std::to_string(imp_n) + ".input.h5", "w");
-      data["freq"] << _ft.wsample_fermi();
-      data["G_imp/data"] << G0_imp;
-      data["G_imp/data_in"] << g_w;
-      data["Delta/data"] << delta_out;
-      data["Delta/data_in"] << delta_w;
+      {
+        h5pp::archive data(_root + "/ed." + std::to_string(imp_n) + ".input.h5", "w");
+        data["freq"] << _ft.wsample_fermi();
+        data["G0_imp/data"] << g0_imp.view<double>();
+        data["G_imp/data"] << g_w;
+        data["Delta/data"] << delta_out;
+        data["Delta/data_in"] << delta_w;
+        data["Delta/static"] << delta_1;
 
-      itensor<2> sectors(1, 2);
-      sectors(0, 0) = 0;
-      sectors(0, 1) = 0;
-      auto hop_g    = data["sectors"];
-      hop_g["values"] << sectors;
-      auto bath           = data["Bath"];
-      // Post process H0->H0_imp : discard off - diagonals
-      auto       H0_imp_z = ndarray::transpose(h_core, "sij->ijs").astype<double>();
-      dtensor<3> H0_imp(H0_imp_z.shape());
-      std::transform(H0_imp_z.begin(), H0_imp_z.end(), H0_imp.begin(), [](const std::complex<double>& x) { return x.real(); });
+        itensor<2> sectors(1, 2);
+        sectors(0, 0) = 0;
+        sectors(0, 1) = 0;
+        auto hop_g    = data["sectors"];
+        hop_g["values"] << sectors;
+        auto bath           = data["Bath"];
+        // Post process H0->H0_imp
+        auto H0_imp = ndarray::transpose(h_core + delta_1, "sij->ijs").astype<double>();
+        //dtensor<3> H0_imp(H0_imp_z.shape());
+        //std::transform(H0_imp_z.begin(), H0_imp_z.end(), H0_imp.begin(), [](const std::complex<double>& x) { return x.real(); });
 
-      bath["Epsk/values"] << Epsk;
-      for (size_t io = 0; io < nio; ++io) {
-        bath["Vk_" + std::to_string(io) + "/values"] << Vk[io];
-        data["H0_" + std::to_string(io) + "/values"] << H0_imp(io);
-      }
-      dtensor<6> interaction_(2, 2, nio, nio, nio, nio);
+        bath["Epsk/values"] << Epsk;
+        for (size_t io = 0; io < nio; ++io) {
+          bath["Vk_" + std::to_string(io) + "/values"] << Vk[io];
+          data["H0_" + std::to_string(io) + "/values"] << H0_imp(io);
+        }
+        dtensor<6> interaction_(2, 2, nio, nio, nio, nio);
 
-      // transform interaction into physics convention
-      auto interaction_phys = ndarray::transpose(interaction, "ijkl->ikjl");
+        // transform interaction into physics convention
+        auto interaction_phys = ndarray::transpose(interaction, "ijkl->ikjl");
 
-      interaction_(0, 0) << interaction_phys;
-      interaction_(0, 1) << interaction_phys;
-      interaction_(1, 0) << interaction_phys;
-      interaction_(1, 1) << interaction_phys;
-      data["interaction/values"] << interaction_;
-      data["mu"] << mu;
-      if (nio > 1) {
-        itensor<2> orbitals(nio * nio - nio, 2);
-        for (size_t io = 0, iii = 0; io < nio; ++io) {
-          for (size_t jo = 0; jo < nio; ++jo) {
-            if (io != jo) {
-              orbitals(iii, 0) = io;
-              orbitals(iii, 1) = jo;
-              ++iii;
+        interaction_(0, 0) << interaction_phys;
+        interaction_(0, 1) << interaction_phys;
+        interaction_(1, 0) << interaction_phys;
+        interaction_(1, 1) << interaction_phys;
+        data["interaction/values"] << interaction_;
+        data["mu"] << mu;
+        if (nio > 1) {
+          itensor<2> orbitals(nio * nio - nio, 2);
+          for (size_t io = 0, iii = 0; io < nio; ++io) {
+            for (size_t jo = 0; jo < nio; ++jo) {
+              if (io != jo) {
+                orbitals(iii, 0) = io;
+                orbitals(iii, 1) = jo;
+                ++iii;
+              }
             }
           }
+          data["GreensFunction_orbitals/values"] << orbitals;
         }
-        data["GreensFunction_orbitals/values"] << orbitals;
+        data.close();
       }
-      std::system((_impurity_solver_exec + " " + _impurity_solver_params + " --NSITES=" + std::to_string(nio + nb) +
-                   " --NSPINS=" + std::to_string(2) + " --INPUT_FILE=" + _root + "/ed." + std::to_string(imp_n) + ".input.h5" +
-                   " --OUTPUT_FILE=" + _root + "/ed." + std::to_string(imp_n) + ".result.h5" +
-                   " --arpack.SECTOR=false"
-                   " --siam.NORBITALS=" +
-                   std::to_string(nio) + " --spinstorage.ORBITAL_NUMBER=" + std::to_string(nio) +
-                   " --lanc.BETA=" + std::to_string(_ft.sd().beta()))
-                      .c_str());
+      std::string run = (_impurity_solver_exec + " " + _impurity_solver_params + " --NSITES=" + std::to_string(nio + nb) +
+                 " --NSPINS=" + std::to_string(2) + " --INPUT_FILE=" + _root + "/ed." + std::to_string(imp_n) + ".input.h5" +
+                 " --OUTPUT_FILE=" + _root + "/ed." + std::to_string(imp_n) + ".result.h5" + " --arpack.SECTOR=false"
+                 " --siam.NORBITALS=" + std::to_string(nio) + " --spinstorage.ORBITAL_NUMBER=" + std::to_string(nio) +
+                 " --lanc.BETA=" + std::to_string(_ft.sd().beta()));
+      int sysresult = std::system(run.c_str());
       if (std::filesystem::exists(_root + "/ed." + std::to_string(imp_n) + ".result.h5")) {
-        h5pp::archive ar(_root + "/ed." + std::to_string(imp_n) + ".result.h5");
-        ar["Sigma_inf"] >> sigma_inf_new;
-        ar["Sigma_w"] >> sigma_new;
+        h5pp::archive ar(_root + "/ed." + std::to_string(imp_n) + ".result.h5", "r");
+        dtensor<3> xxx;
+        ar["results/Sigma_inf_ij"] >> xxx;
+        sigma_inf_new.resize(xxx.shape());
+        sigma_inf_new << xxx;
+        ar["results/Sigma_ij"] >> sigma_new.view<double>();
       } else {
         std::cerr << "Impurity result file has not been found" << std::endl;
       }
@@ -235,20 +240,18 @@ namespace green::impurity {
         const ztensor<4>& delta_w, const dtensor<4>& interaction, const ztensor<4>& g_w)>;
 
   public:
-    impurity_solver(const std::string& input_file, const std::string& bath_file, const std::string& impurity_solver_exec,
-                    const std::string& impurity_solver_params, const std::string& dc_solver_exec,
-                    const std::string& dc_solver_params, const std::string& root, const grids::transformer_t& ft,
-                    const bz_utils_t& bz_utils) :
-        _input_file(input_file),
-        _impurity_solver_exec(impurity_solver_exec), _impurity_solver_params(impurity_solver_params),
-        _dc_solver_exec(dc_solver_exec), _dc_solver_params(dc_solver_params), _root(root), _ft(ft), _bz_utils(bz_utils) {
-      size_t                ns = 2;
-      std::shared_ptr<void> ed_solver(new ed_impurity_solver(input_file, bath_file, impurity_solver_exec, impurity_solver_params,
-                                                             dc_solver_exec, dc_solver_params, root));
+    impurity_solver(const green::params::params& p, const grids::transformer_t& ft, const bz_utils_t& bz_utils) :
+        _input_file(p["seet_input"]), _dc_solver_exec(p["dc_solver_exec"]), _dc_solver_params(p["dc_solver_params"]),
+        _root(p["seet_root_dir"]), _spin_symm(p["spin_symm"]), _ft(ft), _bz_utils(bz_utils) {
+      size_t        ns = 2;
+      h5pp::archive ar(_input_file, "r");
+      ar["nimp"] >> _nimp;
+      ar.close();
+      std::shared_ptr<void> ed_solver(new ed_impurity_solver(p["seet_input"], p["bath_file"], p["impurity_solver_exec"], p["impurity_solver_params"], p["seet_root_dir"]));
       _impurity_call = [ed_solver, this](size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
                                          const ztensor<3>& delta_1, const ztensor<4>& delta_w, const dtensor<4>& interaction,
                                          const ztensor<4>& g_w) -> std::tuple<ztensor<3>, ztensor<4>> {
-        return static_cast<ed_impurity_solver*>(ed_solver.get())->solve(imp_n, _ft, mu, ovlp, h_core, delta_w, interaction, g_w);
+        return static_cast<ed_impurity_solver*>(ed_solver.get())->solve(imp_n, _ft, mu, ovlp, h_core, delta_1, delta_w, interaction, g_w);
       };
     }
 
@@ -257,16 +260,13 @@ namespace green::impurity {
 
   private:
     std::string                 _input_file;
-    std::string                 _impurity_solver_exec;
-    std::string                 _impurity_solver_params;
     std::string                 _dc_solver_exec;
     std::string                 _dc_solver_params;
     std::string                 _root;
+    bool                        _spin_symm;
     const grids::transformer_t& _ft;
     const bz_utils_t&           _bz_utils;
     size_t                      _nimp;
-    std::vector<dtensor<2>>     _initial_bath;
-    std::vector<itensor<1>>     _bath_structure;
     func                        _impurity_call;
 
     auto solve_imp(size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core, const dtensor<4>& interaction,
@@ -296,16 +296,17 @@ namespace green::impurity {
   inline auto impurity_solver::solve_dc(size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
                                         const dtensor<4>& interaction, const ztensor<3>& sigma_inf, const ztensor<4>& sigma_w,
                                         const ztensor<4>& g_w) const {
-    ztensor<3>    sigma_inf_new(sigma_inf.shape());
-    ztensor<4>    sigma_new(sigma_w.shape());
     h5pp::archive fff(_root + "/dc." + std::to_string(imp_n) + ".input.h5", "w");
     size_t        ns      = ovlp.shape()[0];
-    size_t        naso    = ovlp.shape()[0];
+    size_t        naso    = ovlp.shape()[1];
 
     ztensor<3>    ovlp_   = ovlp;
     ztensor<3>    h_core_ = h_core;
     ztensor<4>    g_tau_full(_ft.sd().repn_fermi().nts(), ns, naso, naso);
     dtensor<4>    g_tau(_ft.sd().repn_fermi().nts() - 2, ns, naso, naso);
+    ztensor<3>    sigma_inf_new(sigma_inf.shape());
+    ztensor<4>    sigma_new(_ft.sd().repn_fermi().nw(), ns, naso, naso);
+    ztensor<4>    sigma_tau(_ft.sd().repn_fermi().nts(), ns, naso, naso);
 
     _ft.omega_to_tau(g_w, g_tau_full);
     for (size_t it = 1, it2 = 0; it < _ft.sd().repn_fermi().nts() - 1; ++it, ++it2) {
@@ -323,8 +324,8 @@ namespace green::impurity {
       fff["fock/" + std::to_string(is + 1)] << (h_core + sigma_inf)(is).astype<double>();
       // fff["eigval/"+ std::to_string(is+1)] = np.diag(F[s].real)
       // fff["eigvec/"+ std::to_string(is+1)] = F[s].real
-      fff["gf/ftau/" + std::to_string(is + 1)] << g_tau(is);
-      fff["rho/" + std::to_string(is + 1)] << -g_tau_full(_ft.sd().repn_fermi().nts() - 1, is);
+      fff["gf/ftau/" + std::to_string(is + 1)] << g_ftau(is);
+      fff["rho/" + std::to_string(is + 1)] << -g_tau_full(_ft.sd().repn_fermi().nts() - 1, is).astype<double>();
     }
 
     fff["e_nuclear"] << 0.0;
@@ -340,11 +341,12 @@ namespace green::impurity {
     fff["restricted"] << false;
     fff.close();
 
-    std::system((_dc_solver_exec + " " + _dc_solver_params + " --maxiter " + std::to_string(1) + " --unrestricted" +
-                 " --mode GW" + " --repr ir" + " --ncoeff " + std::to_string(_ft.sd().repn_fermi().nts() - 2) + " --beta " +
+    std::string command = _dc_solver_exec + " " + _dc_solver_params + " --maxiter " + std::to_string(1) + " --unrestricted " +
+                 " --mode GW" + " --repr ir" + " --beta " +
                  std::to_string(_ft.sd().beta()) + " --hf-input " + _root + "/dc." + std::to_string(imp_n) + ".input.h5" +
-                 " --output" + _root + "/dc." + std::to_string(imp_n) + ".result.h5")
-                    .c_str());
+                 " --output " + _root + "/dc." + std::to_string(imp_n) + ".result.h5";
+    std::cout<<"DC Command "<<command<<std::endl;
+    std::system(command.c_str());
     if (std::filesystem::exists(_root + "/dc." + std::to_string(imp_n) + ".result.h5")) {
       h5pp::archive ar(_root + "/dc." + std::to_string(imp_n) + ".result.h5");
       for (size_t is = 0; is < 2; ++is) {
@@ -354,14 +356,13 @@ namespace green::impurity {
         ar["output/sigma2/" + std::to_string(is + 1)] >> sigma_t_;
         sigma_inf_new(is) += ndarray::transpose(sigma_1_, "ji->ij");
         dtensor<3> xxx = ndarray::transpose(sigma_t_, "jix->tij");
-        for (size_t it = 1; it < sigma_new.shape()[0]; ++it) {
-          sigma_new(it, is) << xxx(it);
+        for (size_t it = 1; it < sigma_tau.shape()[0] - 1; ++it) {
+          sigma_tau(it, is) << xxx(it);
         }
       }
-      ztensor<4> sigma_w_(_ft.sd().repn_fermi().nw(), ns, naso, naso);
-      _ft.tau_to_omega(sigma_new, sigma_w_);
-      _ft.omega_to_tau(sigma_w_, sigma_new);
       ar.close();
+      ztensor<4> sigma_w_(_ft.sd().repn_fermi().nw(), ns, naso, naso);
+      _ft.tau_to_omega(sigma_tau, sigma_new);
     } else {
       std::cerr << "Double counting result file has not been found" << std::endl;
     }
@@ -385,15 +386,34 @@ namespace green::impurity {
         auto xxx              = g_inv_w_imp.inverse().eval();
       }
     }
+    if(_spin_symm) {
+      for (size_t iw = 0; iw < nw; ++iw) {
+        ztensor<2> tmp(naso, naso);
+        for(size_t is = 0; is < ns; ++is) {
+          tmp += delta(iw, is);
+        }
+        tmp /= ns;
+        for(size_t is = 0; is < ns; ++is) delta(iw, is) << tmp;
+      }
+    }
 
-    std::complex<double> inv_w_m_1 = 1. / _ft.wsample_fermi()(nw - 1);
-    std::complex<double> inv_w_m_2 = 1. / _ft.wsample_fermi()(nw - 2);
-
-    // extract constant shoft in delta
-    delta_1                        = delta(nw - 1) -
-              ((delta(nw - 1) - delta(nw - 2)) / ((inv_w_m_1 * inv_w_m_1) - (inv_w_m_2 * inv_w_m_2)) / (inv_w_m_2 * inv_w_m_2));
-    // for (size_t iw = 0; iw < nw; ++iw) delta(iw) -= delta_1;
-
+    // extract constant shift in delta
+    grids::MatrixXcd A(3,3);
+    grids::MatrixXcd B(3,1);
+    std::complex<double> iwn (0.0, -1./_ft.wsample_fermi()(nw - 1));
+    std::complex<double> iwn1(0.0, -1./_ft.wsample_fermi()(nw - 2));
+    std::complex<double> iwn2(0.0, -1./_ft.wsample_fermi()(nw - 3));
+    for(size_t is = 0; is < ns; ++is) {
+      for(size_t io = 0; io < naso ; ++io) {
+        for(size_t jo = 0; jo < naso; ++jo) {
+          A << 1.0, iwn, iwn*iwn,  1.0, iwn1, iwn1*iwn1,  1.0, iwn2, iwn2*iwn2;
+          B << delta(nw-1, is, io, jo), delta(nw-2, is, io, jo), delta(nw-3, is, io, jo);
+          grids::MatrixXcd X = A.colPivHouseholderQr().solve(B).eval();
+          delta_1(is, io, jo) = X(0,0).real();
+        }
+      }
+    }
+    for (size_t iw = 0; iw < nw; ++iw) delta(iw) -= delta_1;
     return std::make_tuple(delta_1, delta);
   }
 
@@ -432,6 +452,7 @@ namespace green::impurity {
           matrix(sigma_w_loc_new(it, is)) += matrix(uu).transpose() * matrix(sigma_as(it, is)) * matrix(uu);
         }
       }
+      std::cout<<"Imputity "<<imp<<" finished"<<std::endl;
     }
     return std::make_tuple(sigma_inf_loc_new, sigma_w_loc_new);
   }
