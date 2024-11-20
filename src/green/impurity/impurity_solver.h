@@ -448,7 +448,6 @@ namespace green::impurity {
     size_t     ns = ovlp.shape()[0];
     ztensor<3> sigma_inf_loc_new(sigma_inf.shape());
     ztensor<4> sigma_w_loc_new(sigma.shape());
-    h5pp::archive ar("shit.h5", "w");
     for (int imp = 0; imp < _nimp; ++imp) {
       // project local quantities onto an active subspace
       dtensor<2> uu;
@@ -466,11 +465,7 @@ namespace green::impurity {
       _ft.tau_to_omega(g_as, g_as_w);
       _ft.tau_to_omega(sigma_as, sigma_as_w);
       auto [sigma_inf_new, sigma_w_new] = solve_imp(imp, mu, ovlp_as, h_core_as, interaction, sigma_inf_as, sigma_as_w, g_as_w);
-      ar[std::to_string(imp) + "/s_imp/inf"] << sigma_inf_new;
-      ar[std::to_string(imp) + "/s_imp/w"] << sigma_w_new;
       auto [sigma_inf_dc, sigma_w_dc] = _dc_call(imp, _ft, mu, ovlp_as, h_core_as, interaction, sigma_inf_as, sigma_as_w, g_as_w);
-      ar[std::to_string(imp) + "/s_dc/inf"] << sigma_inf_dc;
-      ar[std::to_string(imp) + "/s_dc/w"] << sigma_w_dc;
       sigma_w_new -= sigma_w_dc;
       sigma_inf_new -= sigma_inf_dc;
       _ft.omega_to_tau(sigma_w_new, sigma_as);
