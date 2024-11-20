@@ -130,17 +130,19 @@ namespace green::impurity {
           }
           shift += 2 * nk;
         }
-        for (size_t io = 0; io < nio; ++io) {
-          dtensor<2> Vk_(Epsk.shape());
-          for (size_t io2 = 0, ik = 0, shift = 0; io2 < nio; io2++) {
-            size_t nk = _bath_structure[imp_n](io2);
-            for (size_t iik = 0; iik < nk; ++iik, ++ik) {
+      }
+      for (size_t io = 0; io < nio; ++io) {
+        dtensor<2> Vk_(Epsk.shape());
+        for (size_t io2 = 0, ik = 0, shift = 0; io2 < nio; io2++) {
+          size_t nk = _bath_structure[imp_n](io2);
+          for (size_t iik = 0; iik < nk; ++iik, ++ik) {
+            for (size_t is = 0; is < ns; ++is) {
               if (io == io2) Vk_(ik, is) = bath_arr(is, shift + iik);
             }
-            shift += 2 * nk;
           }
-          Vk.push_back(Vk_);
+          shift += 2 * nk;
         }
+        Vk.push_back(Vk_);
       }
       ztensor<4> g0_imp(delta_out.shape());
       for (size_t iw = 0; iw < delta_out.shape()[0]; ++iw) {
@@ -169,9 +171,6 @@ namespace green::impurity {
         auto bath   = data["Bath"];
         // Post process H0->H0_imp
         auto H0_imp = ndarray::transpose(h_core + delta_1, "sij->ijs").astype<double>();
-        // dtensor<3> H0_imp(H0_imp_z.shape());
-        // std::transform(H0_imp_z.begin(), H0_imp_z.end(), H0_imp.begin(), [](const std::complex<double>& x) { return x.real();
-        // });
 
         bath["Epsk/values"] << Epsk;
         for (size_t io = 0; io < nio; ++io) {
@@ -306,7 +305,7 @@ namespace green::impurity {
           sigma_inf_new(is) += ndarray::transpose(sigma_1_, "ji->ij");
           dtensor<3> xxx = ndarray::transpose(sigma_t_, "jit->tij");
           for (size_t it = 1; it < sigma_tau.shape()[0] - 1; ++it) {
-            sigma_tau(it, is) << xxx(it);
+            sigma_tau(it, is) << xxx(it - 1);
           }
         }
         ar.close();
@@ -449,6 +448,7 @@ namespace green::impurity {
     size_t     ns = ovlp.shape()[0];
     ztensor<3> sigma_inf_loc_new(sigma_inf.shape());
     ztensor<4> sigma_w_loc_new(sigma.shape());
+    h5pp::archive ar("shit.h5", "w");
     for (int imp = 0; imp < _nimp; ++imp) {
       // project local quantities onto an active subspace
       dtensor<2> uu;
@@ -466,7 +466,11 @@ namespace green::impurity {
       _ft.tau_to_omega(g_as, g_as_w);
       _ft.tau_to_omega(sigma_as, sigma_as_w);
       auto [sigma_inf_new, sigma_w_new] = solve_imp(imp, mu, ovlp_as, h_core_as, interaction, sigma_inf_as, sigma_as_w, g_as_w);
+      ar[std::to_string(imp) + "/s_imp/inf"] << sigma_inf_new;
+      ar[std::to_string(imp) + "/s_imp/w"] << sigma_w_new;
       auto [sigma_inf_dc, sigma_w_dc] = _dc_call(imp, _ft, mu, ovlp_as, h_core_as, interaction, sigma_inf_as, sigma_as_w, g_as_w);
+      ar[std::to_string(imp) + "/s_dc/inf"] << sigma_inf_dc;
+      ar[std::to_string(imp) + "/s_dc/w"] << sigma_w_dc;
       sigma_w_new -= sigma_w_dc;
       sigma_inf_new -= sigma_inf_dc;
       _ft.omega_to_tau(sigma_w_new, sigma_as);
