@@ -69,8 +69,8 @@ namespace green::impurity {
   public:
     ed_impurity_solver(const std::string& input_file, const std::string& bath_file, const std::string& impurity_solver_exec,
                        const std::string& impurity_solver_params, const std::string& root) :
-        _input_file(input_file),
-        _impurity_solver_exec(impurity_solver_exec), _impurity_solver_params(impurity_solver_params), _root(root) {
+        _input_file(input_file), _impurity_solver_exec(impurity_solver_exec), _impurity_solver_params(impurity_solver_params),
+        _root(root) {
       size_t        ns = 2;
       size_t        nimp;
       h5pp::archive ar(input_file, "r");
@@ -238,8 +238,7 @@ namespace green::impurity {
   public:
     basic_dc_solver(const std::string& input_file, const std::string& dc_solver_exec, const std::string& dc_solver_params,
                     const std::string& root) :
-        _input_file(input_file),
-        _dc_solver_exec(dc_solver_exec), _dc_solver_params(dc_solver_params), _root(root){};
+        _input_file(input_file), _dc_solver_exec(dc_solver_exec), _dc_solver_params(dc_solver_params), _root(root) {};
 
     auto solve(size_t imp_n, const grids::transformer_t& _ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
                const dtensor<4>& interaction, const ztensor<3>& sigma_inf, const ztensor<4>& sigma_w,
@@ -333,9 +332,14 @@ namespace green::impurity {
         size_t imp_n, const grids::transformer_t& _ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
         const dtensor<4>& interaction, const ztensor<3>& sigma_inf, const ztensor<4>& sigma_w, const ztensor<4>& g_w)>;
 
+    using green_dc_func = std::function<void(
+        std::string, int imp_n, ztensor<3>&, ztensor<4>&)>;
+
   public:
-    impurity_solver(const green::params::params& p, const grids::transformer_t& ft, const bz_utils_t& bz_utils) :
-        _input_file(p["seet_input"]), _root(p["seet_root_dir"]), _spin_symm(p["spin_symm"]), _ft(ft), _bz_utils(bz_utils) {
+    impurity_solver(const green::params::params& p, const grids::transformer_t& ft, const bz_utils_t& bz_utils,
+                    const green_dc_func& dc_func) :
+        _input_file(p["seet_input"]), _root(p["seet_root_dir"]), _spin_symm(p["spin_symm"]), _ft(ft), _bz_utils(bz_utils),
+        _dc_solver(dc_func), _dc_data_prefix(p["dc_data_prefix"])  {
       size_t        ns = 2;
       h5pp::archive ar(_input_file, "r");
       ar["nimp"] >> _nimp;
@@ -371,6 +375,8 @@ namespace green::impurity {
     size_t                      _nimp;
     func                        _impurity_call;
     dc_func                     _dc_call;
+    green_dc_func               _dc_solver;
+    std::string                 _dc_data_prefix;
 
     auto solve_imp(size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core, const dtensor<4>& interaction,
                    const ztensor<3>& sigma_inf, const ztensor<4>& sigma_w, const ztensor<4>& g_w) const;
@@ -379,8 +385,8 @@ namespace green::impurity {
                        const ztensor<4>& sigma_w, const ztensor<4>& g_w) const -> std::tuple<ztensor<3>, ztensor<4>>;
 
     auto project_to_as(double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core, const ztensor<3>& sigma_inf,
-                       const ztensor<4>& sigma, const ztensor<4>& g, const ztensor<2>& UU) const
-        -> std::tuple<ztensor<3>, ztensor<3>, ztensor<3>, ztensor<4>, ztensor<4>>;
+                       const ztensor<4>& sigma, const ztensor<4>& g,
+                       const ztensor<2>& UU) const -> std::tuple<ztensor<3>, ztensor<3>, ztensor<3>, ztensor<4>, ztensor<4>>;
   };
 
   inline auto impurity_solver::solve_imp(size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
@@ -395,8 +401,8 @@ namespace green::impurity {
   }
 
   inline auto impurity_solver::extract_delta(double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
-                                             const ztensor<3>& sigma_inf, const ztensor<4>& sigma_w, const ztensor<4>& g_w) const
-      -> std::tuple<ztensor<3>, ztensor<4>> {
+                                             const ztensor<3>& sigma_inf, const ztensor<4>& sigma_w,
+                                             const ztensor<4>& g_w) const -> std::tuple<ztensor<3>, ztensor<4>> {
     size_t     nw   = g_w.shape()[0];
     size_t     ns   = g_w.shape()[1];
     size_t     naso = g_w.shape()[1];
@@ -465,7 +471,11 @@ namespace green::impurity {
       _ft.tau_to_omega(g_as, g_as_w);
       _ft.tau_to_omega(sigma_as, sigma_as_w);
       auto [sigma_inf_new, sigma_w_new] = solve_imp(imp, mu, ovlp_as, h_core_as, interaction, sigma_inf_as, sigma_as_w, g_as_w);
-      auto [sigma_inf_dc, sigma_w_dc] = _dc_call(imp, _ft, mu, ovlp_as, h_core_as, interaction, sigma_inf_as, sigma_as_w, g_as_w);
+      // auto [sigma_inf_dc, sigma_w_dc] = _dc_call(imp, _ft, mu, ovlp_as, h_core_as, interaction, sigma_inf_as, sigma_as_w,
+      // g_as_w);
+      ztensor<3> sigma_inf_dc(sigma_inf.shape());
+      ztensor<4> sigma_w_dc(sigma.shape()); 
+      _dc_solver(_dc_data_prefix, imp, sigma_inf_dc, sigma_w_dc);
       sigma_w_new -= sigma_w_dc;
       sigma_inf_new -= sigma_inf_dc;
       _ft.omega_to_tau(sigma_w_new, sigma_as);
@@ -482,10 +492,9 @@ namespace green::impurity {
     return std::make_tuple(sigma_inf_loc_new, sigma_w_loc_new);
   }
 
-  inline auto impurity_solver::project_to_as(double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
-                                             const ztensor<3>& sigma_inf, const ztensor<4>& sigma, const ztensor<4>& g,
-                                             const ztensor<2>& UU) const
-      -> std::tuple<ztensor<3>, ztensor<3>, ztensor<3>, ztensor<4>, ztensor<4>> {
+  inline auto impurity_solver::project_to_as(
+      double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core, const ztensor<3>& sigma_inf, const ztensor<4>& sigma,
+      const ztensor<4>& g, const ztensor<2>& UU) const -> std::tuple<ztensor<3>, ztensor<3>, ztensor<3>, ztensor<4>, ztensor<4>> {
     size_t     nt   = g.shape()[0];
     size_t     ns   = ovlp.shape()[0];
     size_t     naso = UU.shape()[0];

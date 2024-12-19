@@ -68,6 +68,7 @@ TEST_CASE("Impurity Solver") {
   p.define<std::string>("impurity_solver_params", "", "");
   p.define<std::string>("dc_solver_exec", "", "/bin/true");
   p.define<std::string>("dc_solver_params", "", "");
+  p.define<std::string>("dc_data_prefix", "", "");
   p.define<std::string>("seet_root_dir", "", TEST_PATH + ""s);
   p.define<std::string>("seet_input", "", input_file);
 
@@ -75,8 +76,10 @@ TEST_CASE("Impurity Solver") {
 
   green::grids::transformer_t ft(p);
   green::impurity::bz_utils_t bz_utils(p);
-
-  green::impurity::impurity_solver solver(p, ft, bz_utils);
+  auto dummy_dc = [](std::string, int, green::impurity::ztensor<3>&, green::impurity::ztensor<4>&) {
+    return;
+  };
+  green::impurity::impurity_solver solver(p, ft, bz_utils, dummy_dc);
   green::impurity::ztensor<4> sigma1_k;
   green::impurity::ztensor<5> sigma_k;
   green::impurity::ztensor<5> g_k;
