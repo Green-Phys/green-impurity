@@ -26,6 +26,7 @@
 #include <green/ndarray/ndarray_math.h>
 #include <green/params/params.h>
 #include <green/symmetry/symmetry.h>
+#include <green/utils/mpi_shared.h>
 
 #include <tuple>
 
@@ -64,6 +65,9 @@ namespace green::impurity {
   auto matrix(const ndarray::ndarray<prec, 2>& array) {
     return CMMatrixX<prec>(array.data(), array.shape()[0], array.shape()[1]);
   }
+
+  using green_dc_func = std::function<void(
+        std::string, int imp_n, utils::shared_object<ztensor<5>>&, ztensor<4>&, utils::shared_object<ztensor<5>>&)>;
 
   class ed_impurity_solver {
   public:
@@ -242,7 +246,7 @@ namespace green::impurity {
 
     auto solve(size_t imp_n, const grids::transformer_t& _ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
                const dtensor<4>& interaction, const ztensor<3>& sigma_inf, const ztensor<4>& sigma_w,
-               const ztensor<4>& g_w) const {
+               const ztensor<4>& g_w, green_dc_func& green_solver) const {
       h5pp::archive fff(_root + "/dc." + std::to_string(imp_n) + ".input.h5", "w");
       size_t        ns      = ovlp.shape()[0];
       size_t        naso    = ovlp.shape()[1];
@@ -328,13 +332,6 @@ namespace green::impurity {
         size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core, const ztensor<3>& delta_1,
         const ztensor<4>& delta_w, const dtensor<4>& interaction, const ztensor<4>& g_w)>;
 
-    using dc_func = std::function<std::tuple<ztensor<3>, ztensor<4>>(
-        size_t imp_n, const grids::transformer_t& _ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
-        const dtensor<4>& interaction, const ztensor<3>& sigma_inf, const ztensor<4>& sigma_w, const ztensor<4>& g_w)>;
-
-    using green_dc_func = std::function<void(
-        std::string, int imp_n, ztensor<3>&, ztensor<4>&)>;
-
   public:
     impurity_solver(const green::params::params& p, const grids::transformer_t& ft, const bz_utils_t& bz_utils,
                     const green_dc_func& dc_func) :
@@ -352,15 +349,6 @@ namespace green::impurity {
         return static_cast<ed_impurity_solver*>(ed_solver.get())
             ->solve(imp_n, _ft, mu, ovlp, h_core, delta_1, delta_w, interaction, g_w);
       };
-
-      std::shared_ptr<void> dc_solver(
-          new basic_dc_solver(p["seet_input"], p["dc_solver_exec"], p["dc_solver_params"], p["seet_root_dir"]));
-      _dc_call = [dc_solver, this](size_t imp_n, const grids::transformer_t& _ft, double mu, const ztensor<3>& ovlp,
-                                   const ztensor<3>& h_core, const dtensor<4>& interaction, const ztensor<3>& sigma_inf,
-                                   const ztensor<4>& sigma_w, const ztensor<4>& g_w) -> std::tuple<ztensor<3>, ztensor<4>> {
-        return static_cast<basic_dc_solver*>(dc_solver.get())
-            ->solve(imp_n, _ft, mu, ovlp, h_core, interaction, sigma_inf, sigma_w, g_w);
-      };
     }
 
     auto solve(double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core, const ztensor<3>& sigma_inf, const ztensor<4>& sigma,
@@ -374,7 +362,6 @@ namespace green::impurity {
     const bz_utils_t&           _bz_utils;
     size_t                      _nimp;
     func                        _impurity_call;
-    dc_func                     _dc_call;
     green_dc_func               _dc_solver;
     std::string                 _dc_data_prefix;
 
@@ -454,6 +441,7 @@ namespace green::impurity {
     size_t     ns = ovlp.shape()[0];
     ztensor<3> sigma_inf_loc_new(sigma_inf.shape());
     ztensor<4> sigma_w_loc_new(sigma.shape());
+    utils::mpi_context mpi_ctx(MPI_COMM_SELF);
     for (int imp = 0; imp < _nimp; ++imp) {
       // project local quantities onto an active subspace
       dtensor<2> uu;
@@ -466,19 +454,28 @@ namespace green::impurity {
       }
       auto [ovlp_as, h_core_as, sigma_inf_as, g_as, sigma_as] =
           project_to_as(mu, ovlp, h_core, sigma_inf, sigma, g, uu.astype<std::complex<double>>());
+      size_t naso = h_core_as.shape()[2];
       ztensor<4> g_as_w(_ft.sd().repn_fermi().nw(), g_as.shape()[1], g_as.shape()[2], g_as.shape()[3]);
       ztensor<4> sigma_as_w(_ft.sd().repn_fermi().nw(), sigma_as.shape()[1], sigma_as.shape()[2], sigma_as.shape()[3]);
       _ft.tau_to_omega(g_as, g_as_w);
       _ft.tau_to_omega(sigma_as, sigma_as_w);
       auto [sigma_inf_new, sigma_w_new] = solve_imp(imp, mu, ovlp_as, h_core_as, interaction, sigma_inf_as, sigma_as_w, g_as_w);
-      // auto [sigma_inf_dc, sigma_w_dc] = _dc_call(imp, _ft, mu, ovlp_as, h_core_as, interaction, sigma_inf_as, sigma_as_w,
-      // g_as_w);
-      ztensor<3> sigma_inf_dc(sigma_inf.shape());
-      ztensor<4> sigma_w_dc(sigma.shape()); 
-      _dc_solver(_dc_data_prefix, imp, sigma_inf_dc, sigma_w_dc);
-      sigma_w_new -= sigma_w_dc;
-      sigma_inf_new -= sigma_inf_dc;
+      std::array<size_t, 5> shape_in{nt, ns, 1, naso, naso};
+      std::array<size_t, 4> shape_in_inf{ns, 1, naso, naso};
+      std::array<size_t, 4> shape_out{nt, ns, naso, naso};
+      std::array<size_t, 3> shape_out_inf{ns, naso, naso};
+
+      utils::shared_object<ztensor<5>> sigma_dc(shape_in, mpi_ctx);
+      utils::shared_object<ztensor<5>> g_dc(shape_in, mpi_ctx);
+      g_dc.fence();
+      g_dc.object() << g_as.reshape(shape_in);
+      g_dc.fence();
+
+      ztensor<4> sigma_inf_dc(shape_in_inf);
+      _dc_solver(_dc_data_prefix, imp, g_dc, sigma_inf_dc, sigma_dc);
+      sigma_inf_new -= sigma_inf_dc.reshape(shape_out_inf);
       _ft.omega_to_tau(sigma_w_new, sigma_as);
+      sigma_as -= sigma_dc.object().reshape(shape_out);
       for (size_t is = 0; is < ns; ++is) {
         matrix(sigma_inf_loc_new(is)) += matrix(uu).transpose() * matrix(sigma_inf_new(is)) * matrix(uu);
       }
