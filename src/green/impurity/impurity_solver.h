@@ -31,6 +31,7 @@
 #include <tuple>
 
 #include "bath_fitting.h"
+#include "inchworm_inpurity_solver.h"
 
 namespace green::impurity {
 
@@ -341,14 +342,25 @@ namespace green::impurity {
       h5pp::archive ar(_input_file, "r");
       ar["nimp"] >> _nimp;
       ar.close();
-      std::shared_ptr<void> ed_solver(new ed_impurity_solver(p["seet_input"], p["bath_file"], p["impurity_solver_exec"],
+      if(p["impurity_solver"].as<std::string>() == "ED") {
+        std::shared_ptr<void> ed_solver(new ed_impurity_solver(p["seet_input"], p["bath_file"], p["impurity_solver_exec"],
                                                              p["impurity_solver_params"], p["seet_root_dir"]));
-      _impurity_call = [ed_solver, this](size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
-                                         const ztensor<3>& delta_1, const ztensor<4>& delta_w, const dtensor<4>& interaction,
-                                         const ztensor<4>& g_w) -> std::tuple<ztensor<3>, ztensor<4>> {
-        return static_cast<ed_impurity_solver*>(ed_solver.get())
-            ->solve(imp_n, _ft, mu, ovlp, h_core, delta_1, delta_w, interaction, g_w);
-      };
+        _impurity_call = [ed_solver, this](size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
+                                           const ztensor<3>& delta_1, const ztensor<4>& delta_w, const dtensor<4>& interaction,
+                                           const ztensor<4>& g_w) -> std::tuple<ztensor<3>, ztensor<4>> {
+          return static_cast<ed_impurity_solver*>(ed_solver.get())
+              ->solve(imp_n, _ft, mu, ovlp, h_core, delta_1, delta_w, interaction, g_w);
+        };
+      } else {
+        std::shared_ptr<void> inchworm_solver(new inchworm_inpurity_solver(p["seet_input"], p["impurity_solver_exec"],
+                                                             p["impurity_solver_params"], p["seet_root_dir"]));
+        _impurity_call = [inchworm_solver, this](size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
+                                           const ztensor<3>& delta_1, const ztensor<4>& delta_w, const dtensor<4>& interaction,
+                                           const ztensor<4>& g_w) -> std::tuple<ztensor<3>, ztensor<4>> {
+          return static_cast<inchworm_inpurity_solver*>(inchworm_solver.get())
+              ->solve(imp_n, _ft, mu, ovlp, h_core, delta_1, delta_w, interaction, g_w);
+        };
+      }
     }
 
     auto solve(double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core, const ztensor<3>& sigma_inf, const ztensor<4>& sigma,
