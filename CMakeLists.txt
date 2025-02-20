@@ -11,6 +11,7 @@ include(GreenDeps)
 add_green_dependency(green-ndarray)
 add_green_dependency(green-symmetry)
 add_green_dependency(green-grids)
+add_green_dependency(green-utils)
 find_package(Eigen3 REQUIRED)
 
 add_subdirectory(deps)

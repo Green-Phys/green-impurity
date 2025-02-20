@@ -19,9 +19,14 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#define CATCH_CONFIG_RUNNER
 #include "green/impurity/impurity_solver.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_session.hpp>
+
+#include <mpi.h>
+
 namespace green::impurity {
   ztensor<4> compute_local_obj(const ztensor<5>& obj, const ztensor<3>& x_k, const grids::transformer_t& ft, const bz_utils_t& bz_utils, size_t ns, size_t nso) {
     ztensor<4> obj_loc(ft.sd().repn_fermi().nts(), ns, nso, nso);
@@ -68,6 +73,7 @@ TEST_CASE("Impurity Solver") {
   p.define<std::string>("impurity_solver_params", "", "");
   p.define<std::string>("dc_solver_exec", "", "/bin/true");
   p.define<std::string>("dc_solver_params", "", "");
+  p.define<std::string>("dc_data_prefix", "", "");
   p.define<std::string>("seet_root_dir", "", TEST_PATH + ""s);
   p.define<std::string>("seet_input", "", input_file);
 
@@ -75,8 +81,10 @@ TEST_CASE("Impurity Solver") {
 
   green::grids::transformer_t ft(p);
   green::impurity::bz_utils_t bz_utils(p);
-
-  green::impurity::impurity_solver solver(p, ft, bz_utils);
+  auto dummy_dc = [](std::string, int, green::utils::shared_object<green::impurity::ztensor<5>>&, green::impurity::ztensor<4>&, green::utils::shared_object<green::impurity::ztensor<5>>&) {
+    return;
+  };
+  green::impurity::impurity_solver solver(p, ft, bz_utils, dummy_dc);
   green::impurity::ztensor<4> sigma1_k;
   green::impurity::ztensor<5> sigma_k;
   green::impurity::ztensor<5> g_k;
@@ -114,4 +122,11 @@ TEST_CASE("Impurity Solver") {
   auto sigma1 = green::impurity::compute_local_obj(sigma1_k, x_k, bz_utils, ns, nso);
 
   solver.solve(mu, ovlp, h_core, sigma1, sigma, g);
+}
+
+int main(int argc, char** argv) {
+  MPI_Init(&argc, &argv);
+  int result = Catch::Session().run(argc, argv);
+  MPI_Finalize();
+  return result;
 }
