@@ -69,6 +69,7 @@ TEST_CASE("Impurity Solver") {
   green::grids::define_parameters(p);
   p.define<bool>("spin_symm", "", false);
   p.define<std::string>("bath_file", "", bath_file);
+  p.define<std::string>("impurity_solver", "", "ED");
   p.define<std::string>("impurity_solver_exec", "", "/bin/true");
   p.define<std::string>("impurity_solver_params", "", "");
   p.define<std::string>("dc_solver_exec", "", "/bin/true");
