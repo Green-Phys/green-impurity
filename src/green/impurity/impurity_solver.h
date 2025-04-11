@@ -81,6 +81,7 @@ namespace green::impurity {
       h5pp::archive ar(input_file, "r");
       ar["nimp"] >> nimp;
       ar.close();
+      if(!std::filesystem::exists(bath_file)) throw std::runtime_error("Bath structure file does not exist");
       std::ifstream ff(bath_file);
       for (size_t imp = 0; imp < nimp; ++imp) {
         std::vector<double> bath;
@@ -239,95 +240,6 @@ namespace green::impurity {
     std::vector<itensor<1>> _bath_structure;
   };
 
-  class basic_dc_solver {
-  public:
-    basic_dc_solver(const std::string& input_file, const std::string& dc_solver_exec, const std::string& dc_solver_params,
-                    const std::string& root) :
-        _input_file(input_file), _dc_solver_exec(dc_solver_exec), _dc_solver_params(dc_solver_params), _root(root) {};
-
-    auto solve(size_t imp_n, const grids::transformer_t& _ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
-               const dtensor<4>& interaction, const ztensor<3>& sigma_inf, const ztensor<4>& sigma_w,
-               const ztensor<4>& g_w, green_dc_func& green_solver) const {
-      h5pp::archive fff(_root + "/dc." + std::to_string(imp_n) + ".input.h5", "w");
-      size_t        ns      = ovlp.shape()[0];
-      size_t        naso    = ovlp.shape()[1];
-
-      ztensor<3>    ovlp_   = ovlp;
-      ztensor<3>    h_core_ = h_core;
-      ztensor<4>    g_tau_full(_ft.sd().repn_fermi().nts(), ns, naso, naso);
-      dtensor<4>    g_tau(_ft.sd().repn_fermi().nts() - 2, ns, naso, naso);
-      ztensor<3>    sigma_inf_new(sigma_inf.shape());
-      ztensor<4>    sigma_new(_ft.sd().repn_fermi().nw(), ns, naso, naso);
-      ztensor<4>    sigma_tau(_ft.sd().repn_fermi().nts(), ns, naso, naso);
-
-      _ft.omega_to_tau(g_w, g_tau_full);
-      for (size_t it = 1, it2 = 0; it < _ft.sd().repn_fermi().nts() - 1; ++it, ++it2) {
-        g_tau(it2) << g_tau_full(it).astype<double>();
-      }
-
-      auto g_ftau = ndarray::transpose(g_tau, "tsij->sjit");
-
-      fff["uchem"] << interaction;
-      fff["ovlp"] << ovlp_(0).astype<double>();
-      fff["hcore"] << h_core_(0).astype<double>();
-      fff["h0"] << h_core_.astype<double>();
-
-      for (size_t is = 0; is < ovlp.shape()[0]; ++is) {
-        fff["fock/" + std::to_string(is + 1)] << (h_core + sigma_inf)(is).astype<double>();
-        // fff["eigval/"+ std::to_string(is+1)] = np.diag(F[s].real)
-        // fff["eigvec/"+ std::to_string(is+1)] = F[s].real
-        fff["gf/ftau/" + std::to_string(is + 1)] << g_ftau(is);
-        fff["rho/" + std::to_string(is + 1)] << -g_tau_full(_ft.sd().repn_fermi().nts() - 1, is).astype<double>();
-      }
-
-      fff["e_nuclear"] << 0.0;
-      fff["enuc"] << 0.0;
-      fff["etot_hf"] << 0.0;
-      fff["filling"] << 4.;
-      fff["mu"] << mu;
-      fff["e0"] << 0.;
-      fff["nelectron"] << 4.;
-      fff["spin"] << 0.;
-      fff["esigma1"] << 0.;
-      fff["esigma2"] << 0.;
-      fff["restricted"] << false;
-      fff.close();
-
-      std::string command = _dc_solver_exec + " " + _dc_solver_params + " --maxiter " + std::to_string(1) + " --unrestricted " +
-                            " --mode GW" + " --repr ir" + " --beta " + std::to_string(_ft.sd().beta()) + " --hf-input " + _root +
-                            "/dc." + std::to_string(imp_n) + ".input.h5" + " --output " + _root + "/dc." + std::to_string(imp_n) +
-                            ".result.h5";
-      std::cout << "DC Command " << command << std::endl;
-      std::system(command.c_str());
-      if (std::filesystem::exists(_root + "/dc." + std::to_string(imp_n) + ".result.h5")) {
-        h5pp::archive ar(_root + "/dc." + std::to_string(imp_n) + ".result.h5");
-        for (size_t is = 0; is < 2; ++is) {
-          dtensor<2> sigma_1_;
-          dtensor<3> sigma_t_;
-          ar["output/sigma1/" + std::to_string(is + 1)] >> sigma_1_;
-          ar["output/sigma2/" + std::to_string(is + 1)] >> sigma_t_;
-          sigma_inf_new(is) += ndarray::transpose(sigma_1_, "ji->ij");
-          dtensor<3> xxx = ndarray::transpose(sigma_t_, "jit->tij");
-          for (size_t it = 1; it < sigma_tau.shape()[0] - 1; ++it) {
-            sigma_tau(it, is) << xxx(it - 1);
-          }
-        }
-        ar.close();
-        ztensor<4> sigma_w_(_ft.sd().repn_fermi().nw(), ns, naso, naso);
-        _ft.tau_to_omega(sigma_tau, sigma_new);
-      } else {
-        std::cerr << "Double counting result file has not been found" << std::endl;
-      }
-      return std::make_tuple(sigma_inf_new, sigma_new);
-    }
-
-  private:
-    std::string _input_file;
-    std::string _dc_solver_exec;
-    std::string _dc_solver_params;
-    std::string _root;
-  };
-
   class impurity_solver {
     using func    = std::function<std::tuple<ztensor<3>, ztensor<4>>(
         size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core, const ztensor<3>& delta_1,
@@ -479,6 +391,9 @@ namespace green::impurity {
 
       utils::shared_object<ztensor<5>> sigma_dc(shape_in, mpi_ctx);
       utils::shared_object<ztensor<5>> g_dc(shape_in, mpi_ctx);
+      sigma_dc.fence();
+      sigma_dc.object().set_zero();
+      sigma_dc.fence();
       g_dc.fence();
       g_dc.object() << g_as.reshape(shape_in);
       g_dc.fence();
