@@ -72,8 +72,6 @@ TEST_CASE("Impurity Solver") {
   p.define<std::string>("impurity_solver", "", "ED");
   p.define<std::string>("impurity_solver_exec", "", "/bin/true");
   p.define<std::string>("impurity_solver_params", "", "");
-  p.define<std::string>("dc_solver_exec", "", "/bin/true");
-  p.define<std::string>("dc_solver_params", "", "");
   p.define<std::string>("dc_data_prefix", "", "");
   p.define<std::string>("seet_root_dir", "", TEST_PATH + ""s);
   p.define<std::string>("seet_input", "", input_file);
