@@ -47,45 +47,6 @@ jobs:
           cd build;
           ctest -j1 --output-on-failure;
 
-      - name: Upload build directory for coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-dir
-          path: build
-
-  coverage:
-    needs: [build]
-    strategy:
-      fail-fast: false
-
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y lcov
-          sudo apt-get install -y \
-            gcc \
-            g++ \
-            gfortran \
-            cmake \
-            libopenmpi-dev \
-            openmpi-bin \
-            libhdf5-dev \
-            libboost-all-dev \
-            libfftw3-dev \
-            libopenblas-dev \
-            libeigen3-dev
-
-      - name: Download build directory
-        uses: actions/download-artifact@v4
-        with:
-          name: build-dir
-          path: build
-
       - name: Run coverage
         run: |
           cd build
