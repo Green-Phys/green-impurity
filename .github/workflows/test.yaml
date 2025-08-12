@@ -47,6 +47,12 @@ jobs:
           cd build;
           ctest -j1 --output-on-failure;
 
+      - name: Upload build directory for coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-dir
+          path: build
+
   coverage:
     needs: [build]
     strategy:
@@ -55,9 +61,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lcov
+
+      - name: Download build directory
+        uses: actions/download-artifact@v4
+        with:
+          name: build-dir
+          path: build
+
       - name: Run coverage
         run: |
-          cd build;
+          cd build
           lcov --capture --directory . --output-file coverage.info;
           lcov --remove coverage.info '/usr/*' --output-file coverage.info
           lcov --remove coverage.info '/opt/ohpc/pub/compiler/*' --output-file coverage.info
