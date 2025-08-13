@@ -32,7 +32,8 @@ jobs:
             libboost-all-dev \
             libfftw3-dev \
             libopenblas-dev \
-            libeigen3-dev
+            libeigen3-dev \
+            lcov
 
       - name: Build
         run: |
