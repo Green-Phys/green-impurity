@@ -53,8 +53,8 @@ jobs:
           cd build
           lcov --capture --directory . --exclude '*/_deps/*' --output-file coverage.info;
           lcov --remove coverage.info '/usr/*' --output-file coverage.info
-          lcov --remove coverage.info '*_deps*' --output-file --ignore-errors unused coverage.info
-          lcov --remove coverage.info '*deps*' --output-file --ignore-errors unused coverage.info
+          lcov --remove coverage.info '*_deps*' --ignore-errors unused --output-file coverage.info
+          lcov --remove coverage.info '*deps*' --ignore-errors unused --output-file coverage.info
           lcov --remove coverage.info '*libs*' --output-file coverage.info
           lcov --list coverage.info
 
