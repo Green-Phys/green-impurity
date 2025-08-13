@@ -51,7 +51,7 @@ jobs:
       - name: Run coverage
         run: |
           cd build
-          lcov --capture --directory . --output-file coverage.info;
+          lcov --capture --directory . --exclude '*/_deps/*' --output-file coverage.info;
           lcov --remove coverage.info '/usr/*' --output-file coverage.info
           lcov --remove coverage.info '/opt/ohpc/pub/compiler/*' --output-file coverage.info
           lcov --remove coverage.info '*_deps*' --output-file coverage.info
