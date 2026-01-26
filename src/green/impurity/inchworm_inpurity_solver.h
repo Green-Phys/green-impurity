@@ -123,9 +123,10 @@ namespace green::impurity {
                 size_t J = j / ns;
                 size_t K = k / ns;
                 size_t L = l / ns;
-                if (std::abs(interaction_phys(I, J, K, L)) > 1e-10)
+                if (std::abs(interaction_phys(I, J, K, L)) > 1e-10) {
                   U_file << idx << "\t" << i << " " << j << " " << k << " " << l << " " << interaction_phys(I, J, K, L) << " " << 0.0 << "\n";
                   ++idx;
+                }
               }
             }
           }

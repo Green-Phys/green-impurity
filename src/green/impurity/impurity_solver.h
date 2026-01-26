@@ -307,7 +307,7 @@ namespace green::impurity {
      * @param sigma impurity dynamic self-energy
      * @param g impurity Green's function
      * @param UU transformation to active space
-     * @return tuple of projected (h_core, sigma_inf, sigma, g)
+     * @return tuple of projected (ovlp, h_core, sigma_inf, g, sigma)
      */
     auto project_to_as(double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core, const ztensor<3>& sigma_inf,
                        const ztensor<4>& sigma, const ztensor<4>& g,
