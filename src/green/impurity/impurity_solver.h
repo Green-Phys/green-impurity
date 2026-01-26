@@ -69,8 +69,6 @@ namespace green::impurity {
 
   using green_dc_func = std::function<void(
         std::string, int imp_n, utils::shared_object<ztensor<5>>&, ztensor<4>&, utils::shared_object<ztensor<5>>&)>;
-  
-  std::string lowercase(std::string str);
 
   class ed_impurity_solver {
   public:
@@ -256,7 +254,7 @@ namespace green::impurity {
       h5pp::archive ar(_input_file, "r");
       ar["nimp"] >> _nimp;
       ar.close();
-      if(lowercase(p["impurity_solver"].as<std::string>()) == "ed") {
+      if(p["impurity_solver"].as<std::string>() == "ED") {
         std::shared_ptr<void> ed_solver(new ed_impurity_solver(p["seet_input"], p["bath_file"], p["impurity_solver_exec"],
                                                              p["impurity_solver_params"], p["seet_root_dir"]));
         _impurity_call = [ed_solver, this](size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
@@ -265,7 +263,7 @@ namespace green::impurity {
           return static_cast<ed_impurity_solver*>(ed_solver.get())
               ->solve(imp_n, _ft, mu, ovlp, h_core, delta_1, delta_w, interaction, g_w);
         };
-      } else if (lowercase(p["impurity_solver"].as<std::string>()) == "inchworm") {
+      } else if (p["impurity_solver"].as<std::string>() == "INCHWORM") {
         if (p["itermax"].as<int>() > 1 && p["mixing_type"].as<std::string>() != "SIGMA_MIXING") {
           throw std::runtime_error("SEET + inchworm currently only supports itermax = 1 and SIGMA_MIXING mode");
         }
@@ -455,11 +453,6 @@ namespace green::impurity {
       }
     }
     return std::make_tuple(ovlp_as, h_core_as, sigma_inf_as, g_as, sigma_as);
-  }
-
-  inline std::string lowercase(std::string str) {
-    std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) { return std::tolower(c); });
-    return str;
   }
 }  // namespace green::impurity
 
