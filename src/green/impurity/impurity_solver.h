@@ -69,6 +69,8 @@ namespace green::impurity {
 
   using green_dc_func = std::function<void(
         std::string, int imp_n, utils::shared_object<ztensor<5>>&, ztensor<4>&, utils::shared_object<ztensor<5>>&)>;
+  
+  std::string lowercase(std::string str);
 
   class ed_impurity_solver {
   public:
@@ -455,7 +457,7 @@ namespace green::impurity {
     return std::make_tuple(ovlp_as, h_core_as, sigma_inf_as, g_as, sigma_as);
   }
 
-  std::string lowercase(std::string str) {
+  inline std::string lowercase(std::string str) {
     std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) { return std::tolower(c); });
     return str;
   }
