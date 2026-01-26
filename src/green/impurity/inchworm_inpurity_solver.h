@@ -132,11 +132,12 @@ namespace green::impurity {
         }
         U_file.close();
       }
-      // Inchworm requires another SLURM job, so we will stop the code here for now
+      // Inchworm requires another SLURM job, so we will return ZERO here, and update the actual
+      // result after inchworm calculation is done.
+
       // std::string run       = (_impurity_solver_exec + " " + _impurity_solver_params);
       // int         sysresult = std::system(run.c_str());
       // { std::cerr << "Impurity result file has not been found" << std::endl; }
-      // Just return zeros for now
       sigma_inf_new.set_zero();
       sigma_new.set_zero();
       return std::make_tuple(sigma_inf_new, sigma_new);
