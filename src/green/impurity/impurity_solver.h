@@ -254,7 +254,7 @@ namespace green::impurity {
       h5pp::archive ar(_input_file, "r");
       ar["nimp"] >> _nimp;
       ar.close();
-      if(p["impurity_solver"].as<std::string>() == "ED") {
+      if(lowercase(p["impurity_solver"].as<std::string>()) == "ed") {
         std::shared_ptr<void> ed_solver(new ed_impurity_solver(p["seet_input"], p["bath_file"], p["impurity_solver_exec"],
                                                              p["impurity_solver_params"], p["seet_root_dir"]));
         _impurity_call = [ed_solver, this](size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
@@ -263,7 +263,10 @@ namespace green::impurity {
           return static_cast<ed_impurity_solver*>(ed_solver.get())
               ->solve(imp_n, _ft, mu, ovlp, h_core, delta_1, delta_w, interaction, g_w);
         };
-      } else {
+      } else if (lowercase(p["impurity_solver"].as<std::string>()) == "inchworm") {
+        if (p["itermax"].as<int>() > 1 && p["mixing_type"].as<std::string>() != "SIGMA_MIXING") {
+          throw std::runtime_error("SEET + inchworm currently only supports itermax = 1 and SIGMA_MIXING mode");
+        }
         std::shared_ptr<void> inchworm_solver(new inchworm_inpurity_solver(p["seet_input"], p["impurity_solver_exec"],
                                                              p["impurity_solver_params"], p["seet_root_dir"]));
         _impurity_call = [inchworm_solver, this](size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
@@ -295,6 +298,17 @@ namespace green::impurity {
     auto extract_delta(double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core, const ztensor<3>& sigma_inf,
                        const ztensor<4>& sigma_w, const ztensor<4>& g_w) const -> std::tuple<ztensor<3>, ztensor<4>>;
 
+    /**
+     * Project impurity quantities to active space
+     * @param mu chemical potential
+     * @param ovlp overlap matrix
+     * @param h_core kinetic Hamiltonian
+     * @param sigma_inf impurity static self-energy
+     * @param sigma impurity dynamic self-energy
+     * @param g impurity Green's function
+     * @param UU transformation to active space
+     * @return tuple of projected (h_core, sigma_inf, sigma, g)
+     */
     auto project_to_as(double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core, const ztensor<3>& sigma_inf,
                        const ztensor<4>& sigma, const ztensor<4>& g,
                        const ztensor<2>& UU) const -> std::tuple<ztensor<3>, ztensor<3>, ztensor<3>, ztensor<4>, ztensor<4>>;
@@ -439,6 +453,11 @@ namespace green::impurity {
       }
     }
     return std::make_tuple(ovlp_as, h_core_as, sigma_inf_as, g_as, sigma_as);
+  }
+
+  std::string lowercase(std::string str) {
+    std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) { return std::tolower(c); });
+    return str;
   }
 }  // namespace green::impurity
 
