@@ -63,11 +63,11 @@ jobs:
         run: |
           cd build;
           lcov --capture --directory . --output-file coverage.info --ignore-errors source;
-          lcov --remove coverage.info '/usr/*' --output-file coverage.info
-          lcov --remove coverage.info '/opt/ohpc/pub/compiler/*' --output-file coverage.info
-          lcov --remove coverage.info '*_deps*' --output-file coverage.info
-          lcov --remove coverage.info '*deps*' --output-file coverage.info
-          lcov --remove coverage.info '*libs*' --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' --output-file coverage.info --ignore-errors unused
+          lcov --remove coverage.info '/opt/ohpc/pub/compiler/*' --output-file coverage.info --ignore-errors unused
+          lcov --remove coverage.info '*_deps*' --output-file coverage.info --ignore-errors unused
+          lcov --remove coverage.info '*deps*' --output-file coverage.info --ignore-errors unused
+          lcov --remove coverage.info '*libs*' --output-file coverage.info --ignore-errors unused
           lcov --list coverage.info
 
       - name: Upload coverage reports to Codecov
