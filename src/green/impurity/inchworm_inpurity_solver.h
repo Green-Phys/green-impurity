@@ -50,7 +50,7 @@ namespace green::impurity {
       // One-body term
       // Static:
       {
-        std::ofstream hooping_file("hopping.txt");
+        std::ofstream hooping_file("imp_" + std::to_string(imp_n) + "_hopping.txt");
         for (size_t i = 0; i < nio; ++i) {
           for (size_t s1 = 0; s1 < ns; ++s1) {
             for (size_t j = 0; j < nio; ++j) {
@@ -75,7 +75,7 @@ namespace green::impurity {
         MMatrixX<std::complex<double>>  delta_t_m(delta_t.data(), _uxl.shape()[0], ns * nio * nio);
         CMMatrixX<std::complex<double>> delta_w_m(delta_w.data(), delta_w.shape()[0], ns * nio * nio);
         delta_t_m = Ttc_even * Tcn * delta_w_m * std::sqrt(2.0 / ft.sd().beta());
-        std::ofstream delta_file("delta.txt");
+        std::ofstream delta_file("imp_" + std::to_string(imp_n) + "_delta.txt");
         for (size_t t = 0; t < delta_t.shape()[0]; ++t) {
           for (size_t i = 0; i < nio; ++i) {
             for (size_t s1 = 0; s1 < ns; ++s1) {
@@ -92,40 +92,42 @@ namespace green::impurity {
           }
         }
       }
-      // Two-body term
+      // Two-body term with spin symmetry
+      // NOTE: Whether or not we break spin-symmetry in G, or even in relativistic cases, U will still have spin-symmetry.
+      // TODO: Fully relativistic GW, beyond X2C will require modifications
       {
         // transform interaction into physics convention
+        // Only consider terms of the form U( i s1; j s2; k s1; l s2)
         auto   interaction_phys = ndarray::transpose(interaction, "ijkl->ikjl");
         size_t non_zero         = 0;
-        for (size_t i = 0; i < nio * ns; ++i) {
-          for (size_t j = 0; j < nio * ns; ++j) {
-            for (size_t k = 0; k < nio * ns; ++k) {
-              for (size_t l = 0; l < nio * ns; ++l) {
-                size_t I = i / ns;
-                size_t J = j / ns;
-                size_t K = k / ns;
-                size_t L = l / ns;
-                if (std::abs(interaction_phys(I, J, K, L)) > 1e-10) {
-                  ++non_zero;
+        for (size_t s1 = 0; s1 < ns; ++s1) {
+          for (size_t s2 = 0; s2 < ns; ++s2) {
+            for (size_t I = 0; I < nio; ++I) {
+              for (size_t J = 0; J < nio; ++J) {
+                for (size_t K = 0; K < nio; ++K) {
+                  for (size_t L = 0; L < nio; ++L) {
+                    if (std::abs(interaction_phys(I, J, K, L)) > 1e-10) ++non_zero;
+                  }
                 }
               }
             }
           }
         }
-        std::ofstream U_file("Uijkl.txt");
+        std::ofstream U_file("imp_" + std::to_string(imp_n) + "_Uijkl.txt");
         U_file << non_zero << "\n";
         int idx = 0;
-        for (size_t i = 0; i < nio * ns; ++i) {
-          for (size_t j = 0; j < nio * ns; ++j) {
-            for (size_t k = 0; k < nio * ns; ++k) {
-              for (size_t l = 0; l < nio * ns; ++l) {
-                size_t I = i / ns;
-                size_t J = j / ns;
-                size_t K = k / ns;
-                size_t L = l / ns;
-                if (std::abs(interaction_phys(I, J, K, L)) > 1e-10) {
-                  U_file << idx << "\t" << i << " " << j << " " << k << " " << l << " " << interaction_phys(I, J, K, L) << " " << 0.0 << "\n";
-                  ++idx;
+        for (size_t s1 = 0; s1 < ns; ++s1) {
+          for (size_t s2 = 0; s2 < ns; ++s2) {
+            for (size_t I = 0; I < nio; ++I) {
+              for (size_t J = 0; J < nio; ++J) {
+                for (size_t K = 0; K < nio; ++K) {
+                  for (size_t L = 0; L < nio; ++L) {
+                    if (std::abs(interaction_phys(I, J, K, L)) > 1e-10) {
+                      U_file << idx << "\t" << I * ns + s1 << " " << J * ns + s2 << " " << K * ns + s1 << " " << L * ns + s2
+                             << " " << interaction_phys(I, J, K, L) << " " << 0.0 << "\n";
+                      ++idx;
+                    }
+                  }
                 }
               }
             }
