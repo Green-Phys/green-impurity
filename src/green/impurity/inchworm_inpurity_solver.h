@@ -114,6 +114,7 @@ namespace green::impurity {
         }
         std::ofstream U_file("Uijkl.txt");
         U_file << non_zero << "\n";
+        int idx = 0;
         for (size_t i = 0; i < nio * ns; ++i) {
           for (size_t j = 0; j < nio * ns; ++j) {
             for (size_t k = 0; k < nio * ns; ++k) {
@@ -122,17 +123,24 @@ namespace green::impurity {
                 size_t J = j / ns;
                 size_t K = k / ns;
                 size_t L = l / ns;
-                if (std::abs(interaction_phys(I, J, K, L)) > 1e-10)
-                  U_file << i << " " << j << " " << k << " " << l << " " << interaction_phys(I, J, K, L) << " " << 0.0 << "\n";
+                if (std::abs(interaction_phys(I, J, K, L)) > 1e-10) {
+                  U_file << idx << "\t" << i << " " << j << " " << k << " " << l << " " << interaction_phys(I, J, K, L) << " " << 0.0 << "\n";
+                  ++idx;
+                }
               }
             }
           }
         }
         U_file.close();
       }
-      std::string run       = (_impurity_solver_exec + " " + _impurity_solver_params);
-      int         sysresult = std::system(run.c_str());
-      { std::cerr << "Impurity result file has not been found" << std::endl; }
+      // Inchworm requires another SLURM job, so we will return ZERO here, and update the actual
+      // result after inchworm calculation is done.
+
+      // std::string run       = (_impurity_solver_exec + " " + _impurity_solver_params);
+      // int         sysresult = std::system(run.c_str());
+      // { std::cerr << "Impurity result file has not been found" << std::endl; }
+      sigma_inf_new.set_zero();
+      sigma_new.set_zero();
       return std::make_tuple(sigma_inf_new, sigma_new);
     }
 
