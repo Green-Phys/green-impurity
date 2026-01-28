@@ -26,6 +26,7 @@
 #include <catch2/catch_session.hpp>
 
 #include <mpi.h>
+#include <filesystem>
 
 namespace green::impurity {
   ztensor<4> compute_local_obj(const ztensor<5>& obj, const ztensor<3>& x_k, const grids::transformer_t& ft, const bz_utils_t& bz_utils, size_t ns, size_t nso) {
@@ -57,7 +58,7 @@ namespace green::impurity {
   }
 }
 
-TEST_CASE("Impurity Solver") {
+void impurity_solver_test(std::string impurity_solver_type) {
   std::string test_file   = TEST_PATH + "/data.h5"s;
   std::string bath_file   = TEST_PATH + "/bath.txt"s;
   std::string input_file   = TEST_PATH + "/transform.h5"s;
@@ -69,12 +70,15 @@ TEST_CASE("Impurity Solver") {
   green::grids::define_parameters(p);
   p.define<bool>("spin_symm", "", false);
   p.define<std::string>("bath_file", "", bath_file);
-  p.define<std::string>("impurity_solver", "", "ED");
+  p.define<std::string>("impurity_solver", "", impurity_solver_type);
   p.define<std::string>("impurity_solver_exec", "", "/bin/true");
   p.define<std::string>("impurity_solver_params", "", "");
   p.define<std::string>("dc_data_prefix", "", "");
   p.define<std::string>("seet_root_dir", "", TEST_PATH + ""s);
   p.define<std::string>("seet_input", "", input_file);
+  if (impurity_solver_type == "INCHWORM") {
+    p.define<std::string>("itermax", "", "1");
+  }
 
   p.parse("test --BETA 100 --grid_file " + grid_file + " --input_file " + weak_input_file );
 
@@ -121,6 +125,34 @@ TEST_CASE("Impurity Solver") {
   auto sigma1 = green::impurity::compute_local_obj(sigma1_k, x_k, bz_utils, ns, nso);
 
   solver.solve(mu, ovlp, h_core, sigma1, sigma, g);
+}
+
+TEST_CASE("Impurity Solver") {
+  SECTION("ED") { impurity_solver_test("ED"); }
+  SECTION("INCHWORM") {
+    impurity_solver_test("INCHWORM");
+    // Check if Hamiltonian data files were created successfully for all impurities
+    REQUIRE(std::filesystem::exists("imp_0_hopping.txt"));
+    REQUIRE(std::filesystem::exists("imp_0_delta.txt"));
+    REQUIRE(std::filesystem::exists("imp_0_Uijkl.txt"));
+    REQUIRE(std::filesystem::exists("imp_1_hopping.txt"));
+    REQUIRE(std::filesystem::exists("imp_1_delta.txt"));
+    REQUIRE(std::filesystem::exists("imp_1_Uijkl.txt"));
+    // Check if files have something in them - not checking for exact values
+    REQUIRE(std::filesystem::file_size("imp_0_hopping.txt"));
+    REQUIRE(std::filesystem::file_size("imp_0_delta.txt"));
+    REQUIRE(std::filesystem::file_size("imp_0_Uijkl.txt"));
+    REQUIRE(std::filesystem::file_size("imp_1_hopping.txt"));
+    REQUIRE(std::filesystem::file_size("imp_1_delta.txt"));
+    REQUIRE(std::filesystem::file_size("imp_1_Uijkl.txt"));
+    // Cleanup: Remove all files
+    REQUIRE(std::filesystem::remove("imp_0_hopping.txt"));
+    REQUIRE(std::filesystem::remove("imp_0_delta.txt"));
+    REQUIRE(std::filesystem::remove("imp_0_Uijkl.txt"));
+    REQUIRE(std::filesystem::remove("imp_1_hopping.txt"));
+    REQUIRE(std::filesystem::remove("imp_1_delta.txt"));
+    REQUIRE(std::filesystem::remove("imp_1_Uijkl.txt"));
+  }
 }
 
 int main(int argc, char** argv) {
