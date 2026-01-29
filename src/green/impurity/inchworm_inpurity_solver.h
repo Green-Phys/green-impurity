@@ -100,27 +100,31 @@ namespace green::impurity {
         size_t ndim_increment   = (rhf) ? 1 : 4; // restricted vs unrestricted
         size_t spin_decrement   = (rhf) ? 0 : 2; // avoid double creation/annihilation in same spin-orbitals
         size_t non_zero         = 0;
-        bool is_non_zero = false;
         for (size_t I = 0; I < nio; ++I) {
           for (size_t J = 0; J < nio; ++J) {
             for (size_t K = 0; K < nio; ++K) {
               for (size_t L = 0; L < nio; ++L) {
-                is_non_zero = std::abs(interaction(I, J, K, L)) > 1e-10;  // if interaction is below threshold, skip
-                if (!is_non_zero) continue; // forget all logic and skip if interaction is zero
+                if (std::abs(interaction(I, J, K, L)) < 1e-10) continue; // forget all logic and skip if interaction is zero
                 if (rhf) {
                   non_zero += ndim_increment;
                   continue;
                 }
                 // uhf case
+                // if I == K or J == L, it warrants that the spin label of I and K will be opposite,
+                // and by construction spin of I = spin of J and spin of K = spin of L,
+                // so when (I==K) or (J==L) or both, we need to remove two combinations:
+                // (up up up up) and (dn dn dn dn)
                 non_zero += ndim_increment;
-                if (I == K || J == L) non_zero -= spin_decrement; // remove (up up up up) and(dn dn dn dn)
+                if (I == K || J == L) non_zero -= spin_decrement;
               }
             }
           }
         }
+        std::cout << "NOTE: Will write interaction tensor in the Chemist notation!" << std::endl;
+        std::cout << "i.,e., U(ijkl) cdag_i cdag_k c_l c_j" << std::endl;
         std::ofstream U_file("imp_" + std::to_string(imp_n) + "_Uijkl.txt");
         U_file << non_zero << "\n";
-        int idx = 0;
+        size_t idx = 0;
         for (size_t i = 0; i < nio * ns; ++i) {
           for (size_t j = 0; j < nio * ns; ++j) {
             for (size_t k = 0; k < nio * ns; ++k) {
@@ -129,8 +133,7 @@ namespace green::impurity {
                 size_t J = j / ns;
                 size_t K = k / ns;
                 size_t L = l / ns;
-                is_non_zero = std::abs(interaction(I, J, K, L)) > 1e-10;  // if interaction is below threshold, skip
-                if (!is_non_zero) continue;
+                if (std::abs(interaction(I, J, K, L)) < 1e-10) continue;
                 if (rhf) {
                   U_file << idx << "\t" << i << " " << j << " " << k << " " << l << " " << interaction(I, J, K, L) << " " << 0.0 << "\n";
                   ++idx;
@@ -140,7 +143,7 @@ namespace green::impurity {
                   size_t s2 = j % ns;
                   size_t s3 = k % ns;
                   size_t s4 = l % ns;
-                  if (i == k || j == l) continue;       // ignore double creation/annihilation in same spin-orbitals
+                  if (i == k || j == l) continue;       // ignore double creation/annihilation in same spin-orbitals (different from I,J,K,L which are atomic orbitals)
                   if (s1 != s2 || s3 != s4) continue;   // ignore spin-flip terms
                   // what remains is a valid term in Uijkl
                   U_file << idx << "\t" << i << " " << j << " " << k << " " << l << " " << interaction(I, J, K, L) << " " << 0.0 << "\n";
