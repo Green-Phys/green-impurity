@@ -138,13 +138,72 @@ TEST_CASE("Impurity Solver") {
     REQUIRE(std::filesystem::exists("imp_1_hopping.txt"));
     REQUIRE(std::filesystem::exists("imp_1_delta.txt"));
     REQUIRE(std::filesystem::exists("imp_1_Uijkl.txt"));
-    // Check if files have something in them - not checking for exact values
-    REQUIRE(std::filesystem::file_size("imp_0_hopping.txt"));
-    REQUIRE(std::filesystem::file_size("imp_0_delta.txt"));
-    REQUIRE(std::filesystem::file_size("imp_0_Uijkl.txt"));
-    REQUIRE(std::filesystem::file_size("imp_1_hopping.txt"));
-    REQUIRE(std::filesystem::file_size("imp_1_delta.txt"));
-    REQUIRE(std::filesystem::file_size("imp_1_Uijkl.txt"));
+    // Check hopping file data
+    {
+      std::ifstream hop_file("imp_0_hopping.txt");
+      std::string line;
+      size_t n_terms = 16;
+      size_t count = 0;
+      while (std::getline(hop_file, line)) {
+        ++count;
+      }
+      REQUIRE(n_terms == count);
+    }
+    {
+      std::ifstream hop_file("imp_1_hopping.txt");
+      std::string line;
+      size_t n_terms = 16;
+      size_t count = 0;
+      while (std::getline(hop_file, line)) {
+        ++count;
+      }
+      REQUIRE(n_terms == count);
+    }
+    // Check Delta file data
+    {
+      std::ifstream delta_file("imp_0_delta.txt");
+      std::string line;
+      size_t n_terms = 16 * 101;
+      size_t count = 0;
+      while (std::getline(delta_file, line)) {
+        ++count;
+      }
+      REQUIRE(n_terms == count);
+    }
+    {
+      std::ifstream delta_file("imp_1_delta.txt");
+      std::string line;
+      size_t n_terms = 16 * 101;
+      size_t count = 0;
+      while (std::getline(delta_file, line)) {
+        ++count;
+      }
+      REQUIRE(n_terms == count);
+    }
+    // Check Uijkl file data
+    {
+      std::ifstream U_file("imp_0_Uijkl.txt");
+      std::string line;
+      // read number of non-zero terms from the heaer
+      std::getline(U_file, line);
+      size_t n_terms = std::stol(line);
+      size_t count = 0;
+      while (std::getline(U_file, line)) {
+        ++count;
+      }
+      REQUIRE(n_terms == count);
+    }
+    {
+      std::ifstream U_file("imp_1_Uijkl.txt");
+      std::string line;
+      std::getline(U_file, line);
+      size_t n_terms = std::stol(line);
+      size_t count = 0;
+      while (std::getline(U_file, line)) {
+        ++count;
+      }
+      REQUIRE(n_terms == count);
+    }
     // Cleanup: Remove all files (best-effort; do not fail test on cleanup)
     std::filesystem::remove("imp_0_hopping.txt");
     std::filesystem::remove("imp_0_delta.txt");
