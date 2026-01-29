@@ -145,13 +145,13 @@ TEST_CASE("Impurity Solver") {
     REQUIRE(std::filesystem::file_size("imp_1_hopping.txt"));
     REQUIRE(std::filesystem::file_size("imp_1_delta.txt"));
     REQUIRE(std::filesystem::file_size("imp_1_Uijkl.txt"));
-    // Cleanup: Remove all files
-    REQUIRE(std::filesystem::remove("imp_0_hopping.txt"));
-    REQUIRE(std::filesystem::remove("imp_0_delta.txt"));
-    REQUIRE(std::filesystem::remove("imp_0_Uijkl.txt"));
-    REQUIRE(std::filesystem::remove("imp_1_hopping.txt"));
-    REQUIRE(std::filesystem::remove("imp_1_delta.txt"));
-    REQUIRE(std::filesystem::remove("imp_1_Uijkl.txt"));
+    // Cleanup: Remove all files (best-effort; do not fail test on cleanup)
+    std::filesystem::remove("imp_0_hopping.txt");
+    std::filesystem::remove("imp_0_delta.txt");
+    std::filesystem::remove("imp_0_Uijkl.txt");
+    std::filesystem::remove("imp_1_hopping.txt");
+    std::filesystem::remove("imp_1_delta.txt");
+    std::filesystem::remove("imp_1_Uijkl.txt");
   }
 }
 
