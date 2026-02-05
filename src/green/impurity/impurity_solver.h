@@ -425,7 +425,7 @@ namespace green::impurity {
           matrix(sigma_w_loc_new(it, is)) += matrix(uu).transpose() * matrix(sigma_as(it, is)) * matrix(uu);
         }
       }
-      std::cout << "Imputity " << imp << " finished" << std::endl;
+      std::cout << "Impurity " << imp << " finished" << std::endl;
     }
     return std::make_tuple(sigma_inf_loc_new, sigma_w_loc_new);
   }
