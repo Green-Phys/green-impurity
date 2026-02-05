@@ -120,8 +120,10 @@ namespace green::impurity {
             }
           }
         }
-        std::cout << "NOTE: Will write interaction tensor in the Chemist notation!" << std::endl;
-        std::cout << "i.,e., U(ijkl) cdag_i cdag_k c_l c_j" << std::endl;
+        std::cout << "------------------------------------------------------------" << std::endl;
+        std::cout << "NOTE: Will write interaction tensor in the Tensor notation!" << std::endl;
+        std::cout << "i.,e., 2-body term = (1/2) * U(ijkl) cdag_i cdag_k c_k c_l" << std::endl;
+        std::cout << "------------------------------------------------------------" << std::endl;
         std::ofstream U_file("imp_" + std::to_string(imp_n) + "_Uijkl.txt");
         U_file << non_zero << "\n";
         size_t idx = 0;
@@ -133,9 +135,20 @@ namespace green::impurity {
                 size_t J = j / ns;
                 size_t K = k / ns;
                 size_t L = l / ns;
+                // Internally, IJKL and ijkl will be treated as chemist notation indices, i.e.
+                //    i = (I,s1); j = (J,s1); k = (K,s2); l = (L,s2)
+                // When we store to Uijkl.txt, we will re-arrange the indices to match Tensor notation.
+                // --------------------------------------------------------------
+                // Logic for storing in Tensor notation
+                // --------------------------------------------------------------
+                // We have the tensor notation:    V(ijkl) cdag_i cdag_j c_k c_l
+                // Let's rearrange by changing dummy index labels:
+                //     V(iklj) cdag_i cdag_k c_l c_j
+                // Compare with:             U(ijkl) cdag_i cdag_k c_l c_j
+                // Therefore,   V(iklj) = U(ijkl)
                 if (std::abs(interaction(I, J, K, L)) < 1e-10) continue;
                 if (rhf) {
-                  U_file << idx << "\t" << i << " " << j << " " << k << " " << l << " " << interaction(I, J, K, L) << " " << 0.0 << "\n";
+                  U_file << idx << "\t" << i << " " << k << " " << l << " " << j << " " << interaction(I, J, K, L) << " " << 0.0 << "\n";
                   ++idx;
                 } else {
                   // Deal with spin only for UHF
@@ -146,7 +159,7 @@ namespace green::impurity {
                   if (i == k || j == l) continue;       // ignore double creation/annihilation in same spin-orbitals (different from I,J,K,L which are atomic orbitals)
                   if (s1 != s2 || s3 != s4) continue;   // ignore spin-flip terms
                   // what remains is a valid term in Uijkl
-                  U_file << idx << "\t" << i << " " << j << " " << k << " " << l << " " << interaction(I, J, K, L) << " " << 0.0 << "\n";
+                  U_file << idx << "\t" << i << " " << k << " " << l << " " << j << " " << interaction(I, J, K, L) << " " << 0.0 << "\n";
                   ++idx;
                 }
               }
