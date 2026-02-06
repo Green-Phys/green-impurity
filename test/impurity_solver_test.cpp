@@ -134,10 +134,14 @@ TEST_CASE("Impurity Solver") {
     // Check if Hamiltonian data files were created successfully for all impurities
     REQUIRE(std::filesystem::exists("imp_0_hopping.txt"));
     REQUIRE(std::filesystem::exists("imp_0_delta.txt"));
-    REQUIRE(std::filesystem::exists("imp_0_Uijkl.txt"));
+    REQUIRE(std::filesystem::exists("imp_0_Uijkl_phys.txt"));
+    REQUIRE(std::filesystem::exists("imp_0_Uijkl_cthyb.txt"));
+    REQUIRE(std::filesystem::exists("imp_0_Uijkl_chem.txt"));
     REQUIRE(std::filesystem::exists("imp_1_hopping.txt"));
     REQUIRE(std::filesystem::exists("imp_1_delta.txt"));
-    REQUIRE(std::filesystem::exists("imp_1_Uijkl.txt"));
+    REQUIRE(std::filesystem::exists("imp_1_Uijkl_phys.txt"));
+    REQUIRE(std::filesystem::exists("imp_1_Uijkl_cthyb.txt"));
+    REQUIRE(std::filesystem::exists("imp_1_Uijkl_chem.txt"));
     // Check hopping file data
     {
       std::ifstream hop_file("imp_0_hopping.txt");
