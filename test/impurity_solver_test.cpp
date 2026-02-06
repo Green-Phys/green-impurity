@@ -182,7 +182,7 @@ TEST_CASE("Impurity Solver") {
     }
     // Check Uijkl file data
     {
-      std::ifstream U_file("imp_0_Uijkl.txt");
+      std::ifstream U_file("imp_0_Uijkl_chem.txt");
       std::string line;
       // read number of non-zero terms from the heaer
       std::getline(U_file, line);
@@ -194,7 +194,53 @@ TEST_CASE("Impurity Solver") {
       REQUIRE(n_terms == count);
     }
     {
-      std::ifstream U_file("imp_1_Uijkl.txt");
+      std::ifstream U_file("imp_0_Uijkl_phys.txt");
+      std::string line;
+      // read number of non-zero terms from the heaer
+      std::getline(U_file, line);
+      size_t n_terms = std::stol(line);
+      size_t count = 0;
+      while (std::getline(U_file, line)) {
+        ++count;
+      }
+      REQUIRE(n_terms == count);
+    }
+    {
+      std::ifstream U_file("imp_0_Uijkl_cthyb.txt");
+      std::string line;
+      // read number of non-zero terms from the heaer
+      std::getline(U_file, line);
+      size_t n_terms = std::stol(line);
+      size_t count = 0;
+      while (std::getline(U_file, line)) {
+        ++count;
+      }
+      REQUIRE(n_terms == count);
+    }
+    {
+      std::ifstream U_file("imp_1_Uijkl_chem.txt");
+      std::string line;
+      std::getline(U_file, line);
+      size_t n_terms = std::stol(line);
+      size_t count = 0;
+      while (std::getline(U_file, line)) {
+        ++count;
+      }
+      REQUIRE(n_terms == count);
+    }
+    {
+      std::ifstream U_file("imp_1_Uijkl_phys.txt");
+      std::string line;
+      std::getline(U_file, line);
+      size_t n_terms = std::stol(line);
+      size_t count = 0;
+      while (std::getline(U_file, line)) {
+        ++count;
+      }
+      REQUIRE(n_terms == count);
+    }
+    {
+      std::ifstream U_file("imp_1_Uijkl_cthyb.txt");
       std::string line;
       std::getline(U_file, line);
       size_t n_terms = std::stol(line);
@@ -207,10 +253,14 @@ TEST_CASE("Impurity Solver") {
     // Cleanup: Remove all files (best-effort; do not fail test on cleanup)
     std::filesystem::remove("imp_0_hopping.txt");
     std::filesystem::remove("imp_0_delta.txt");
-    std::filesystem::remove("imp_0_Uijkl.txt");
+    std::filesystem::remove("imp_0_Uijkl_chem.txt");
+    std::filesystem::remove("imp_0_Uijkl_phys.txt");
+    std::filesystem::remove("imp_0_Uijkl_cthyb.txt");
     std::filesystem::remove("imp_1_hopping.txt");
     std::filesystem::remove("imp_1_delta.txt");
-    std::filesystem::remove("imp_1_Uijkl.txt");
+    std::filesystem::remove("imp_1_Uijkl_chem.txt");
+    std::filesystem::remove("imp_1_Uijkl_phys.txt");
+    std::filesystem::remove("imp_1_Uijkl_cthyb.txt");
   }
 }
 
