@@ -330,7 +330,7 @@ namespace green::impurity {
                                              const ztensor<4>& g_w) const -> std::tuple<ztensor<3>, ztensor<4>> {
     size_t     nw   = g_w.shape()[0];
     size_t     ns   = g_w.shape()[1];
-    size_t     naso = g_w.shape()[1];
+    size_t     naso = g_w.shape()[2];
     ztensor<3> delta_1(h_core.shape());
     ztensor<4> delta(g_w.shape());
     for (size_t iw = 0; iw < nw; ++iw) {
