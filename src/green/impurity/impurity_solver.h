@@ -31,7 +31,7 @@
 #include <tuple>
 
 #include "bath_fitting.h"
-#include "inchworm_inpurity_solver.h"
+#include "inchworm_impurity_solver.h"
 
 namespace green::impurity {
 
@@ -267,12 +267,12 @@ namespace green::impurity {
         if (p["itermax"].as<int>() > 1 && p["mixing_type"].as<std::string>() != "SIGMA_MIXING") {
           throw std::runtime_error("SEET + inchworm currently only supports itermax = 1 and SIGMA_MIXING mode");
         }
-        std::shared_ptr<void> inchworm_solver(new inchworm_inpurity_solver(p["seet_input"], p["impurity_solver_exec"],
+        std::shared_ptr<void> inchworm_solver(new inchworm_impurity_solver(p["seet_input"], p["impurity_solver_exec"],
                                                              p["impurity_solver_params"], p["seet_root_dir"]));
         _impurity_call = [inchworm_solver, this](size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
                                            const ztensor<3>& delta_1, const ztensor<4>& delta_w, const dtensor<4>& interaction,
                                            const ztensor<4>& g_w) -> std::tuple<ztensor<3>, ztensor<4>> {
-          return static_cast<inchworm_inpurity_solver*>(inchworm_solver.get())
+          return static_cast<inchworm_impurity_solver*>(inchworm_solver.get())
               ->solve(imp_n, _ft, mu, ovlp, h_core, delta_1, delta_w, interaction, g_w);
         };
       }

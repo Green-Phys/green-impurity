@@ -19,19 +19,19 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef GREEN_INCHWORM_INPURITY_SOLVER_H
-#define GREEN_INCHWORM_INPURITY_SOLVER_H
+#ifndef GREEN_INCHWORM_IMPURITY_SOLVER_H
+#define GREEN_INCHWORM_IMPURITY_SOLVER_H
 
 namespace green::impurity {
 
-  class inchworm_inpurity_solver {
+  class inchworm_impurity_solver {
     template <typename prec>
     using MMatrixX = Eigen::Map<Eigen::Matrix<prec, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>;
     template <typename prec>
     using CMMatrixX = Eigen::Map<const Eigen::Matrix<prec, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>;
 
   public:
-    inchworm_inpurity_solver(const std::string& input_file, const std::string& impurity_solver_exec,
+    inchworm_impurity_solver(const std::string& input_file, const std::string& impurity_solver_exec,
                              const std::string& impurity_solver_params, const std::string& root) :
         _input_file(input_file), _impurity_solver_exec(impurity_solver_exec), _impurity_solver_params(impurity_solver_params),
         _root(root) {
@@ -214,4 +214,4 @@ namespace green::impurity {
     dtensor<2>  _uxl;
   };
 }  // namespace green::impurity
-#endif  // GREEN_INCHWORM_INPURITY_SOLVER_H
+#endif  // GREEN_INCHWORM_IMPURITY_SOLVER_H
