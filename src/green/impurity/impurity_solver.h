@@ -330,7 +330,7 @@ namespace green::impurity {
                                              const ztensor<4>& g_w) const -> std::tuple<ztensor<3>, ztensor<4>> {
     size_t     nw   = g_w.shape()[0];
     size_t     ns   = g_w.shape()[1];
-    size_t     naso = g_w.shape()[1];
+    size_t     naso = g_w.shape()[2];
     ztensor<3> delta_1(h_core.shape());
     ztensor<4> delta(g_w.shape());
     for (size_t iw = 0; iw < nw; ++iw) {
@@ -425,7 +425,7 @@ namespace green::impurity {
           matrix(sigma_w_loc_new(it, is)) += matrix(uu).transpose() * matrix(sigma_as(it, is)) * matrix(uu);
         }
       }
-      std::cout << "Imputity " << imp << " finished" << std::endl;
+      std::cout << "Impurity " << imp << " finished" << std::endl;
     }
     return std::make_tuple(sigma_inf_loc_new, sigma_w_loc_new);
   }
