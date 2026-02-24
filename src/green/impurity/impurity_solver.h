@@ -154,7 +154,7 @@ namespace green::impurity {
       for (size_t iw = 0; iw < delta_out.shape()[0]; ++iw) {
         for (size_t is = 0; is < ns; ++is) {
           auto g_inv_w_imp =
-              matrix(ovlp(is)) * (_ft.wsample_fermi()(iw) * 1.0i + mu) - matrix(h_core(is)) - matrix(delta_out(iw, is));
+              matrix(ovlp(is)) * (_ft.wsample_fermi()(iw) * 1.0i + mu) - matrix(h_core(is)) - matrix(delta_1(is)) - matrix(delta_out(iw, is));
           auto g_inv_w_loc       = matrix(g_w(iw, is)).inverse().eval();
           auto xxx               = g_inv_w_imp.inverse().eval();
           matrix(g0_imp(iw, is)) = xxx;
