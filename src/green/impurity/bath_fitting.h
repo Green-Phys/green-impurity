@@ -73,6 +73,8 @@ namespace green::impurity {
      * @param delta - Hybridization function
      * @param bath_structure - structure of the bath for `io`-th orbital
      * @param io - number of current orbital to minimize
+     * @param is - current spin channel to minimize
+     * @param type - type of cost function to use: 1 - sum of residuals, 2 - max residual, 3 - max residual with no frequency cutoff
      */
     hybridization_function_error(const ztensor<1>& freqs, const ztensor<4>& delta, const itensor<1>& bath_structure, size_t io,
                                  size_t is, int type = 3) :
