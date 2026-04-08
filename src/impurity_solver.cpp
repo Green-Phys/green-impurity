@@ -51,9 +51,6 @@ namespace green::impurity {
                                                                  const ztensor<3>& hcore_eff, const dtensor<4>& interaction,
                                                                  const ztensor<3>& sigma_inf, const ztensor<4>& sigma_w,
                                                                  const ztensor<4>& g_w) const {
-    if (!std::filesystem::exists(_root)) {
-      std::filesystem::create_directory(_root);
-    }
     auto [delta_1, delta_w] = extract_delta(mu, ovlp, hcore_eff, sigma_inf, sigma_w, g_w);
     return _impurity_call(imp_n, mu, ovlp, hcore_eff, delta_1, delta_w, interaction, g_w);
   }
@@ -109,6 +106,9 @@ namespace green::impurity {
   std::tuple<ztensor<3>, ztensor<4>> impurity_solver::solve(double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
                                                              const ztensor<3>& sigma_inf, const ztensor<4>& sigma,
                                                              const ztensor<4>& g) const {
+    if (!std::filesystem::exists(_root)) {
+      std::filesystem::create_directory(_root);
+    }
     size_t     nt = _ft.sd().repn_fermi().nts();
     size_t     ns = ovlp.shape()[0];
     ztensor<3> sigma_inf_loc_new(sigma_inf.shape());
