@@ -63,8 +63,6 @@ namespace green::impurity {
       dtensor<2> Epsk;
       std::vector<dtensor<2>> Vk;
       fit_and_parse_bath(imp_n, ft, mu, delta_w, ovlp, Epsk, Vk);
-      write_bath_debug(imp_n, ft, mu, ovlp, hcore_eff, delta_1, delta_w, g_w, Epsk, Vk);
-
       // Step 2: Prepare hybrid system and write GW input (generic future extension)
       prepare_gw_input(imp_n, ovlp, hcore_eff, delta_1, delta_w, Epsk, Vk, mu, interaction, g_w, ft);
 
@@ -147,9 +145,6 @@ namespace green::impurity {
                           const dtensor<2>& Epsk, const std::vector<dtensor<2>>& Vk, double mu,
                           const dtensor<4>& interaction, const ztensor<4>& g_w, const grids::transformer_t& ft) const;
 
-    void write_bath_debug(size_t imp_n, const grids::transformer_t& ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff,
-                const ztensor<3>& delta_1, const ztensor<4>& delta_true, const ztensor<4>& g_w,
-                const dtensor<2>& Epsk, const std::vector<dtensor<2>>& Vk) const;
     int launchCleanChild(const std::string &cmd) const {
       // Must unset stale per-rank vars before calling launcher.
       unsetenv("PMI_FD");

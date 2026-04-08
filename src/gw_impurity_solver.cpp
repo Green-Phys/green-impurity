@@ -54,24 +54,6 @@ namespace green::impurity {
     }
   }
 
-  void gw_impurity_solver::write_bath_debug(size_t imp_n, const grids::transformer_t& ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff,
-                const ztensor<3>& delta_1, const ztensor<4>& delta_true, const ztensor<4>& g_w,
-                const dtensor<2>& Epsk, const std::vector<dtensor<2>>& Vk) const {
-    h5pp::archive debug_data(_root + "/gw_debug." + std::to_string(imp_n) + ".output.h5", "a");
-    debug_data["bath/mu"] << mu;
-    debug_data["bath/freq"] << ft.wsample_fermi();
-    debug_data["bath/true/ovlp"] << ovlp;
-    debug_data["bath/true/h_core"] << hcore_eff;
-    debug_data["bath/true/g_w"] << g_w;
-    debug_data["bath/true/delta_1"] << delta_1;
-    debug_data["bath/true/delta_w"] << delta_true;
-    debug_data["bath/fit/Epsk"] << Epsk;
-    for (size_t io = 0; io < Vk.size(); ++io) {
-      debug_data["bath/fit/Vk_" + std::to_string(io)] << Vk[io];
-    }
-    debug_data.close();
-  }
-  
   void gw_impurity_solver::prepare_gw_input(size_t imp_n, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff, const ztensor<3>& delta_1,
                 const ztensor<4>& delta_w, const dtensor<2>& Epsk, const std::vector<dtensor<2>>& Vk, double mu,
                 const dtensor<4>& interaction, const ztensor<4>& g_w, const grids::transformer_t& ft) const {

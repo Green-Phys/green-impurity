@@ -231,15 +231,6 @@ namespace green::impurity {
       // Transform impurity solver results from Omega to Tau
       _ft.omega_to_tau(sigma_w_new, sigma_as);
 
-      // DEBUG save
-      h5pp::archive debug_data("debug." + std::to_string(imp) + ".output.h5", "w");
-      debug_data["dc/G_tau_in"] << g_dc.object();
-      debug_data["dc/Sigma1_out"] << sigma_inf_dc;
-      debug_data["dc/Sigma_tau_out"] << sigma_dc.object();
-      debug_data["impurity/Sigma1_raw"] << sigma_inf_new;
-      debug_data["impurity/Sigma_tau_raw"] << sigma_as;
-      debug_data.close();
-
       // Update impurity results by subtracting DC sigma
       sigma_inf_new -= sigma_inf_dc.reshape(shape_out_inf);
       sigma_as -= sigma_dc.object().reshape(shape_out);
