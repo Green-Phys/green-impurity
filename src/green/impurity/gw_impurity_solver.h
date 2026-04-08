@@ -54,7 +54,7 @@ namespace green::impurity {
       }
     }
 
-    auto solve(size_t imp_n, const grids::transformer_t& ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
+    auto solve(size_t imp_n, const grids::transformer_t& ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff,
                const ztensor<3>& delta_1, const ztensor<4>& delta_w, const dtensor<4>& interaction, const ztensor<4>& g_w) const {
       ztensor<3> sigma_inf_new(delta_1.shape());
       ztensor<4> sigma_new(delta_w.shape());
@@ -63,17 +63,17 @@ namespace green::impurity {
       dtensor<2> Epsk;
       std::vector<dtensor<2>> Vk;
       fit_and_parse_bath(imp_n, ft, mu, delta_w, ovlp, Epsk, Vk);
-      write_bath_debug(imp_n, ft, mu, ovlp, h_core, delta_1, delta_w, g_w, Epsk, Vk);
+      write_bath_debug(imp_n, ft, mu, ovlp, hcore_eff, delta_1, delta_w, g_w, Epsk, Vk);
 
       // Step 2: Prepare hybrid system and write GW input (generic future extension)
-      prepare_gw_input(imp_n, ovlp, h_core, delta_1, delta_w, Epsk, Vk, mu, interaction, g_w, ft);
+      prepare_gw_input(imp_n, ovlp, hcore_eff, delta_1, delta_w, Epsk, Vk, mu, interaction, g_w, ft);
 
       size_t nio = ovlp.shape()[2];
       size_t nb = Epsk.shape()[0];
       size_t ns = Epsk.shape()[1];
       std::string run = (_impurity_solver_exec +
-                        " --itermax 1 --const_density=false --scf_type=GW" +
-                        " --mixing_weight=1.0 --restart=true" +
+                        " --itermax 10 --const_density=false --scf_type=GW --E_thr=1e-5" +
+                        " --mixing_weight=0.7 --restart=true" +
                         " --BETA=" + std::to_string(ft.sd().beta()) +
                         " --input_file=" + _root + "/gw." + std::to_string(imp_n) + ".input.h5" +
                         " --results_file=" + _root + "/gw." + std::to_string(imp_n) + ".sim.h5") +
@@ -142,12 +142,12 @@ namespace green::impurity {
     void fit_and_parse_bath(size_t imp_n, const grids::transformer_t& ft, double mu, const ztensor<4>& delta_w, const ztensor<3>& ovlp,
                 dtensor<2>& Epsk, std::vector<dtensor<2>>& Vk) const;
 
-    void prepare_gw_input(size_t imp_n, const ztensor<3>& ovlp, const ztensor<3>& h_core, const ztensor<3>& delta_1,
+    void prepare_gw_input(size_t imp_n, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff, const ztensor<3>& delta_1,
                 const ztensor<4>& delta_w,
                           const dtensor<2>& Epsk, const std::vector<dtensor<2>>& Vk, double mu,
                           const dtensor<4>& interaction, const ztensor<4>& g_w, const grids::transformer_t& ft) const;
 
-    void write_bath_debug(size_t imp_n, const grids::transformer_t& ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
+    void write_bath_debug(size_t imp_n, const grids::transformer_t& ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff,
                 const ztensor<3>& delta_1, const ztensor<4>& delta_true, const ztensor<4>& g_w,
                 const dtensor<2>& Epsk, const std::vector<dtensor<2>>& Vk) const;
     int launchCleanChild(const std::string &cmd) const {

@@ -41,12 +41,12 @@ namespace green::impurity {
       ar.close();
     }
 
-    auto solve(size_t imp_n, const grids::transformer_t& ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
+    auto solve(size_t imp_n, const grids::transformer_t& ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff,
                const ztensor<3>& delta_1, const ztensor<4>& delta_w, const dtensor<4>& interaction, const ztensor<4>& g_w) const {
       ztensor<3> sigma_inf_new(delta_1.shape());
       ztensor<4> sigma_new(delta_w.shape());
-      size_t     nio = h_core.shape()[1];
-      size_t     ns  = h_core.shape()[0];
+      size_t     nio = hcore_eff.shape()[1];
+      size_t     ns  = hcore_eff.shape()[0];
       bool       rhf = (ns == 1);
       if (rhf) std::cout << "Detected ns = 1; Assuming this is RHF. Support for relativistic cases not implemented yet." << std::endl;
       // One-body term
@@ -57,7 +57,7 @@ namespace green::impurity {
           for (size_t s1 = 0; s1 < ns; ++s1) {
             for (size_t j = 0; j < nio; ++j) {
               for (size_t s2 = 0; s2 < ns; ++s2) {
-                auto h_imp = h_core(s1, i, j) + delta_1(s1, i, j);
+                auto h_imp = hcore_eff(s1, i, j) + delta_1(s1, i, j);
                 hooping_file << i * ns + s1 << " " << j * ns + s2 << " ";
                 if (s1 == s2)
                   hooping_file << h_imp.real() << " " << h_imp.imag() << "\n";

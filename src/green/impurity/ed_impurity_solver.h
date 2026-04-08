@@ -12,7 +12,6 @@ namespace green::impurity {
                        const std::string& impurity_solver_params, const std::string& root) :
         _input_file(input_file), _impurity_solver_exec(impurity_solver_exec), _impurity_solver_params(impurity_solver_params),
         _root(root) {
-      size_t        ns = 2;
       size_t        nimp;
       h5pp::archive ar(input_file, "r");
       ar["nimp"] >> nimp;
@@ -34,24 +33,27 @@ namespace green::impurity {
           ff >> b;
           bath.push_back(b);
         }
-        dtensor<2> initial_bath(ns, bath.size());
+        // Store single-spin template; tiling to actual ns happens in solve()
+        dtensor<2> initial_bath(1, bath.size());
         itensor<1> bath_struct(bath_structure.size());
-        // first spin
         std::copy(bath.begin(), bath.end(), initial_bath(0).begin());
-        // second spin
-        std::copy(bath.begin(), bath.end(), initial_bath(1).begin());
         std::copy(bath_structure.begin(), bath_structure.end(), bath_struct.begin());
         _initial_bath.push_back(initial_bath);
         _bath_structure.push_back(bath_struct);
       }
     }
 
-    auto solve(size_t imp_n, const grids::transformer_t& _ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
+    auto solve(size_t imp_n, const grids::transformer_t& _ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff,
                const ztensor<3>& delta_1, const ztensor<4>& delta_w, const dtensor<4>& interaction, const ztensor<4>& g_w) const {
       ztensor<3> sigma_inf_new(delta_1.shape());
       ztensor<4> sigma_new(delta_w.shape());
+      size_t     ns    = ovlp.shape()[0];
+      size_t     nbath = _initial_bath[imp_n].shape()[1];
+      dtensor<2> initial_bath_tiled(ns, nbath);
+      for (size_t is = 0; is < ns; ++is)
+        std::copy(_initial_bath[imp_n](0).begin(), _initial_bath[imp_n](0).end(), initial_bath_tiled(is).begin());
       auto [delta_out, bath_arr] =
-          minimize(_ft.sd().repn_fermi().wsample() * 1.0i, delta_w, _initial_bath[imp_n], _bath_structure[imp_n], 1);
+          minimize(_ft.sd().repn_fermi().wsample() * 1.0i, delta_w, initial_bath_tiled, _bath_structure[imp_n], 1);
       {
         std::ofstream ofile(_root + "/bath.dat", std::ios_base::out);
         for (auto b : bath_arr) {
@@ -60,7 +62,6 @@ namespace green::impurity {
         ofile << std::endl;
       }
       size_t                  nio = ovlp.shape()[2];
-      size_t                  ns  = ovlp.shape()[0];
       size_t                  nb  = std::reduce(_bath_structure[imp_n].begin(), _bath_structure[imp_n].end());
       dtensor<2>              Epsk(nb, ns);
       std::vector<dtensor<2>> Vk;
@@ -90,8 +91,7 @@ namespace green::impurity {
       for (size_t iw = 0; iw < delta_out.shape()[0]; ++iw) {
         for (size_t is = 0; is < ns; ++is) {
           auto g_inv_w_imp =
-              matrix(ovlp(is)) * (_ft.wsample_fermi()(iw) * 1.0i + mu) - matrix(h_core(is)) - matrix(delta_1(is)) - matrix(delta_out(iw, is));
-          auto g_inv_w_loc       = matrix(g_w(iw, is)).inverse().eval();
+              matrix(ovlp(is)) * (_ft.wsample_fermi()(iw) * 1.0i + mu) - matrix(hcore_eff(is)) - matrix(delta_1(is)) - matrix(delta_out(iw, is));
           auto xxx               = g_inv_w_imp.inverse().eval();
           matrix(g0_imp(iw, is)) = xxx;
         }
@@ -112,7 +112,7 @@ namespace green::impurity {
         hop_g["values"] << sectors;
         auto bath   = data["Bath"];
         // Post process H0->H0_imp
-        auto H0_imp = ndarray::transpose(h_core + delta_1, "sij->ijs").astype<double>();
+        auto H0_imp = ndarray::transpose(hcore_eff + delta_1, "sij->ijs").astype<double>();
 
         bath["Epsk/values"] << Epsk;
         for (size_t io = 0; io < nio; ++io) {

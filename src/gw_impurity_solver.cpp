@@ -8,10 +8,11 @@ namespace green::impurity {
   void gw_impurity_solver::fit_and_parse_bath(size_t imp_n, const grids::transformer_t& ft, double mu, const ztensor<4>& delta_w, const ztensor<3>& ovlp,
                 dtensor<2>& Epsk, std::vector<dtensor<2>>& Vk) const {
     // bath fitting
-    // NOTE: delta_w was extracted at frequency (iw + mu), so the bath fitting must use
-    // shifted frequencies; otherwise the fitted bath energies will be off by ~mu.
-    // The minimize() function fits delta_w(iw) ~ Σ_k V_k^2 / (iw - eps_k)
-    // To match the extraction frequency convention, we pass (iw + mu).
+    // minimize() fits delta_w(iw) ~ Σ_k V_k^2 / (iw - eps_k) using bare Matsubara frequencies iw.
+    // This yields fitted bath energies eps_k = eps_k_phys - mu (shifted by -mu relative to physical values).
+    // In prepare_gw_input(), mu is explicitly subtracted from the impurity diagonal of h0_eff, so the
+    // GW solver (which uses frequency iw, not iw+mu) sees the bath propagator (iw - eps_k_fit)^{-1}
+    // = (iw + mu - eps_k_phys)^{-1}, which is correct.
     auto [delta_out, bath_arr] = minimize(
       ft.sd().repn_fermi().wsample() * 1.0i, delta_w, _initial_bath[imp_n], _bath_structure[imp_n], 1
     );
@@ -53,14 +54,14 @@ namespace green::impurity {
     }
   }
 
-  void gw_impurity_solver::write_bath_debug(size_t imp_n, const grids::transformer_t& ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
+  void gw_impurity_solver::write_bath_debug(size_t imp_n, const grids::transformer_t& ft, double mu, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff,
                 const ztensor<3>& delta_1, const ztensor<4>& delta_true, const ztensor<4>& g_w,
                 const dtensor<2>& Epsk, const std::vector<dtensor<2>>& Vk) const {
     h5pp::archive debug_data(_root + "/gw_debug." + std::to_string(imp_n) + ".output.h5", "a");
     debug_data["bath/mu"] << mu;
     debug_data["bath/freq"] << ft.wsample_fermi();
     debug_data["bath/true/ovlp"] << ovlp;
-    debug_data["bath/true/h_core"] << h_core;
+    debug_data["bath/true/h_core"] << hcore_eff;
     debug_data["bath/true/g_w"] << g_w;
     debug_data["bath/true/delta_1"] << delta_1;
     debug_data["bath/true/delta_w"] << delta_true;
@@ -71,7 +72,7 @@ namespace green::impurity {
     debug_data.close();
   }
   
-  void gw_impurity_solver::prepare_gw_input(size_t imp_n, const ztensor<3>& ovlp, const ztensor<3>& h_core, const ztensor<3>& delta_1,
+  void gw_impurity_solver::prepare_gw_input(size_t imp_n, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff, const ztensor<3>& delta_1,
                 const ztensor<4>& delta_w, const dtensor<2>& Epsk, const std::vector<dtensor<2>>& Vk, double mu,
                 const dtensor<4>& interaction, const ztensor<4>& g_w, const grids::transformer_t& ft) const {
     // Step 2: Prepare hybrid system for external GW calculation and write input file
@@ -86,7 +87,7 @@ namespace green::impurity {
       for (size_t i_io = 0; i_io < nio; ++i_io) {
         // Add hcore as top rows and columns
         for (size_t j_io = 0; j_io < nio; ++j_io) {
-          h0_eff(is, 0, i_io, j_io) = h_core(is, i_io, j_io) + delta_1(is, i_io, j_io);
+          h0_eff(is, 0, i_io, j_io) = hcore_eff(is, i_io, j_io) + delta_1(is, i_io, j_io);
         }
         h0_eff(is, 0, i_io, i_io) -= mu;
         // Vk
@@ -142,31 +143,12 @@ namespace green::impurity {
     sim_data["iter1/mu"] << 0.;
     sim_data.close();
 
-    // Initialize embedded self-energy from Dyson on the impurity block:
-    // Sigma(iw) = (iw+mu)S - h_core - delta_1 - delta_w - G(iw)^{-1}
-    // Keep Sigma1=0 and store full (static + dynamic) contribution in Selfenergy/data.
+    // Initialize self-energy to zero; the GW impurity solver will build it up self-consistently.
     size_t nt = ft.sd().repn_fermi().nts();
-    size_t nw = ft.sd().repn_fermi().nw();
     ztensor<5> sigma_tau_embed(nt, ns, 1, nao_eff, nao_eff);
     ztensor<4> sigma_inf_embed(ns, 1, nao_eff, nao_eff);
-    ztensor<5> sigma_iw_embed(nw, ns, 1, nao_eff, nao_eff);
     sigma_tau_embed.set_zero();
     sigma_inf_embed.set_zero();
-    sigma_iw_embed.set_zero();
-
-    for (size_t iw = 0; iw < nw; ++iw) {
-      std::complex<double> iwmu = ft.wsample_fermi()(iw) * 1.0i + mu;
-      for (size_t is = 0; is < ns; ++is) {
-        auto g_inv = matrix(g_w(iw, is).copy()).inverse().eval();
-        auto sigma_imp = matrix(ovlp(is)) * iwmu - matrix(h_core(is)) - matrix(delta_1(is)) - matrix(delta_w(iw, is)) - g_inv;
-        for (size_t i = 0; i < nio; ++i) {
-          for (size_t j = 0; j < nio; ++j) {
-            sigma_iw_embed(iw, is, 0, i, j) = sigma_imp(i, j);
-          }
-        }
-      }
-    }
-    ft.omega_to_tau(sigma_iw_embed, sigma_tau_embed);
 
     h5pp::archive sim_data_append(gw_sim_file, "a");
     sim_data_append["iter1/Sigma1"] << sigma_inf_embed;
