@@ -14,38 +14,45 @@ namespace green::impurity {
     h5pp::archive ar(_input_file, "r");
     ar["nimp"] >> _nimp;
     ar.close();
-    if (p["impurity_solver"].as<std::string>() == "ED") {
-      std::shared_ptr<void> ed_solver(new ed_impurity_solver(p["seet_input"], p["bath_file"], p["impurity_solver_exec"],
-                                                             p["impurity_solver_params"], p["seet_root_dir"]));
-      _impurity_call = [ed_solver, this](size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff,
-                                         const ztensor<3>& delta_1, const ztensor<4>& delta_w, const dtensor<4>& interaction,
-                                         const ztensor<4>& g_w) -> std::tuple<ztensor<3>, ztensor<4>> {
-        return static_cast<ed_impurity_solver*>(ed_solver.get())
-            ->solve(imp_n, _ft, mu, ovlp, hcore_eff, delta_1, delta_w, interaction, g_w);
-      };
-    } else if (p["impurity_solver"].as<std::string>() == "INCHWORM") {
-      if (p["itermax"].as<int>() > 1 && p["mixing_type"].as<std::string>() != "SIGMA_MIXING") {
-        throw std::runtime_error("SEET + inchworm currently only supports itermax = 1 and SIGMA_MIXING mode");
+    switch (parse_impurity_solver_type(p["impurity_solver"].as<std::string>())) {
+      case impurity_solver_type::ED: {
+        std::shared_ptr<void> ed_solver(new ed_impurity_solver(p["seet_input"], p["bath_file"], p["impurity_solver_exec"],
+                                                               p["impurity_solver_params"], p["seet_root_dir"]));
+        _impurity_call = [ed_solver, this](size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff,
+                                           const ztensor<3>& delta_1, const ztensor<4>& delta_w, const dtensor<4>& interaction,
+                                           const ztensor<4>& g_w) -> std::tuple<ztensor<3>, ztensor<4>> {
+          return static_cast<ed_impurity_solver*>(ed_solver.get())
+              ->solve(imp_n, _ft, mu, ovlp, hcore_eff, delta_1, delta_w, interaction, g_w);
+        };
+        break;
       }
-      std::shared_ptr<void> inchworm_solver(new inchworm_impurity_solver(p["seet_input"], p["impurity_solver_exec"],
-                                                                         p["impurity_solver_params"], p["seet_root_dir"]));
-      _impurity_call = [inchworm_solver, this](size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff,
-                                               const ztensor<3>& delta_1, const ztensor<4>& delta_w,
-                                               const dtensor<4>& interaction,
-                                               const ztensor<4>& g_w) -> std::tuple<ztensor<3>, ztensor<4>> {
-        return static_cast<inchworm_impurity_solver*>(inchworm_solver.get())
-            ->solve(imp_n, _ft, mu, ovlp, hcore_eff, delta_1, delta_w, interaction, g_w);
-      };
-    } else if (p["impurity_solver"].as<std::string>() == "GW") {
-      std::shared_ptr<void> gw_solver(new gw_impurity_solver(p["seet_input"], p["bath_file"], p["impurity_solver_exec"],
-                                                             p["impurity_solver_params"], _dc_data_prefix,
-                                                             p["seet_root_dir"]));
-      _impurity_call = [gw_solver, this](size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff,
-                                         const ztensor<3>& delta_1, const ztensor<4>& delta_w, const dtensor<4>& interaction,
-                                         const ztensor<4>& g_w) -> std::tuple<ztensor<3>, ztensor<4>> {
-        return static_cast<gw_impurity_solver*>(gw_solver.get())
-            ->solve(imp_n, _ft, mu, ovlp, hcore_eff, delta_1, delta_w, interaction, g_w);
-      };
+      case impurity_solver_type::INCHWORM: {
+        if (p["itermax"].as<int>() > 1 && p["mixing_type"].as<std::string>() != "SIGMA_MIXING") {
+          throw std::runtime_error("SEET + inchworm currently only supports itermax = 1 and SIGMA_MIXING mode");
+        }
+        std::shared_ptr<void> inchworm_solver(new inchworm_impurity_solver(p["seet_input"], p["impurity_solver_exec"],
+                                                                           p["impurity_solver_params"], p["seet_root_dir"]));
+        _impurity_call = [inchworm_solver, this](size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff,
+                                                 const ztensor<3>& delta_1, const ztensor<4>& delta_w,
+                                                 const dtensor<4>& interaction,
+                                                 const ztensor<4>& g_w) -> std::tuple<ztensor<3>, ztensor<4>> {
+          return static_cast<inchworm_impurity_solver*>(inchworm_solver.get())
+              ->solve(imp_n, _ft, mu, ovlp, hcore_eff, delta_1, delta_w, interaction, g_w);
+        };
+        break;
+      }
+      case impurity_solver_type::GW: {
+        std::shared_ptr<void> gw_solver(new gw_impurity_solver(p["seet_input"], p["bath_file"], p["impurity_solver_exec"],
+                                                               p["impurity_solver_params"], _dc_data_prefix,
+                                                               p["seet_root_dir"]));
+        _impurity_call = [gw_solver, this](size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff,
+                                           const ztensor<3>& delta_1, const ztensor<4>& delta_w, const dtensor<4>& interaction,
+                                           const ztensor<4>& g_w) -> std::tuple<ztensor<3>, ztensor<4>> {
+          return static_cast<gw_impurity_solver*>(gw_solver.get())
+              ->solve(imp_n, _ft, mu, ovlp, hcore_eff, delta_1, delta_w, interaction, g_w);
+        };
+        break;
+      }
     }
   }
 
@@ -104,7 +111,7 @@ namespace green::impurity {
                                                              const ztensor<3>& sigma_inf_full,
                                                              const ztensor<4>& sigma, const ztensor<4>& g) const {
     if (!std::filesystem::exists(_root)) {
-      std::filesystem::create_directory(_root);
+      std::filesystem::create_directories(_root);
     }
     size_t     nt  = _ft.sd().repn_fermi().nts();
     size_t     nw  = _ft.sd().repn_fermi().nw();

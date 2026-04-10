@@ -1,3 +1,4 @@
+#include <green/impurity/bath_fitting.h>
 #include <green/impurity/ed_impurity_solver.h>
 
 #include <filesystem>
@@ -155,6 +156,9 @@ namespace green::impurity {
                        " --spinstorage.ORBITAL_NUMBER=" + std::to_string(nio) +
                        " --lanc.BETA=" + std::to_string(ft.sd().beta()));
     int sysresult = std::system(run.c_str());
+    if (sysresult != 0) {
+      throw impurity_solver_exec_error("ED impurity child process failed with code " + std::to_string(sysresult));
+    }
     if (std::filesystem::exists(_root + "/ed." + std::to_string(imp_n) + ".result.h5")) {
       h5pp::archive ar(_root + "/ed." + std::to_string(imp_n) + ".result.h5", "r");
       dtensor<3>    xxx;
@@ -163,7 +167,7 @@ namespace green::impurity {
       sigma_inf_new << xxx;
       ar["results/Sigma_ij"] >> sigma_new.view<double>();
     } else {
-      std::cerr << "Impurity result file has not been found" << std::endl;
+      throw impurity_result_not_found("ED impurity result file not found: " + _root + "/ed." + std::to_string(imp_n) + ".result.h5");
     }
     return std::make_tuple(sigma_inf_new, sigma_new);
   }

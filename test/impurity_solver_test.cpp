@@ -147,6 +147,11 @@ TEST_CASE("Impurity Solver") {
       REQUIRE(interaction.shape()[2] == 2);
       REQUIRE(interaction.shape()[3] == 2);
     }
+    // Cleanup
+    for (int imp = 0; imp < 2; ++imp) {
+      std::filesystem::remove(TEST_PATH + "/ed."s + std::to_string(imp) + ".input.h5");
+    }
+    std::filesystem::remove(TEST_PATH + "/bath.dat"s);
   }
 
   SECTION("INCHWORM") {

@@ -1,9 +1,7 @@
-#include <array>
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <numeric>
-#include <string>
+#include "green/impurity/bath_fitting.h"
 #include "green/impurity/gw_impurity_solver.h"
 
 namespace green::impurity {
@@ -78,7 +76,7 @@ namespace green::impurity {
     std::cout << "\n\n\n----" << std::endl;
     int sysresult = launchCleanChild(run);
     if (sysresult != 0) {
-      throw std::runtime_error("Impurity GW child process failed with code " + std::to_string(sysresult));
+      throw impurity_solver_exec_error("GW impurity child process failed with code " + std::to_string(sysresult));
     }
     if (std::filesystem::exists(_root + "/gw." + std::to_string(imp_n) + ".sim.h5")) {
       h5pp::archive ar(_root + "/gw." + std::to_string(imp_n) + ".sim.h5", "r");
@@ -111,7 +109,7 @@ namespace green::impurity {
       }
       ft.tau_to_omega(sigma_tau_imp, sigma_new);
     } else {
-      std::cerr << "Impurity result file has not been found" << std::endl;
+      throw impurity_result_not_found("GW impurity result file not found: " + _root + "/gw." + std::to_string(imp_n) + ".sim.h5");
     }
     return std::make_tuple(sigma_inf_new, sigma_new);
   }
@@ -270,7 +268,7 @@ namespace green::impurity {
     }
     ztensor<4> vq_old(chunk_size, naux, nio, nio);
     h5pp::archive int_data_dc(vq_file_dc, "r");
-    int_data_dc["0"] >> reinterpret_cast<double*>(vq_old.data());
+    int_data_dc["0"] >> vq_old.view<double>();
     int_data_dc.close();
     ztensor<4> vq_new(chunk_size, naux, nao_eff, nao_eff);
     vq_new.set_zero();

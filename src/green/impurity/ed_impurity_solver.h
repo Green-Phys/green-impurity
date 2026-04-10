@@ -1,9 +1,7 @@
 #ifndef GREEN_ED_IMPURITY_SOLVER_H
 #define GREEN_ED_IMPURITY_SOLVER_H
 
-#include <green/params/params.h>
 #include "common_defs.h"
-#include "bath_fitting.h"
 
 namespace green::impurity {
   class ed_impurity_solver {

@@ -22,6 +22,12 @@
 #ifndef GREEN_IMPURITY_SOLVER_H
 #define GREEN_IMPURITY_SOLVER_H
 
+#include <functional>
+#include <tuple>
+
+#include <green/params/params.h>
+#include <green/utils/mpi_shared.h>
+
 #include "common_defs.h"
 
 namespace green::impurity {

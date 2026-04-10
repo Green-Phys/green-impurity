@@ -1,9 +1,9 @@
 #ifndef GREEN_GW_IMPURITY_SOLVER_H
 #define GREEN_GW_IMPURITY_SOLVER_H
 
+#include <array>
 #include <cstdlib>
 #include "common_defs.h"
-#include "bath_fitting.h"
 
 namespace green::impurity {
 
@@ -32,20 +32,17 @@ namespace green::impurity {
                           const dtensor<4>& interaction, const ztensor<4>& g_w, const grids::transformer_t& ft) const;
 
     int launchCleanChild(const std::string& cmd) const {
-      unsetenv("PMI_FD");
-      unsetenv("PMI_RANK");
-      unsetenv("PMI_SIZE");
-      unsetenv("PMI_PORT");
-      unsetenv("PMIX_RANK");
-      unsetenv("PMIX_SERVER_URI");
-      unsetenv("PMIX_SERVER_URI2");
-      unsetenv("OMPI_COMM_WORLD_RANK");
-      unsetenv("OMPI_COMM_WORLD_SIZE");
-      unsetenv("OMPI_COMM_WORLD_LOCAL_RANK");
-      unsetenv("OMPI_COMM_WORLD_LOCAL_SIZE");
-      unsetenv("OMPI_COMM_WORLD_NODE_RANK");
-      unsetenv("OMPI_UNIVERSE_SIZE");
-      return std::system(build_launcher_cmd(cmd).c_str());
+      static constexpr std::array<const char*, 13> mpi_vars = {
+          "PMI_FD", "PMI_RANK", "PMI_SIZE", "PMI_PORT",
+          "PMIX_RANK", "PMIX_SERVER_URI", "PMIX_SERVER_URI2",
+          "OMPI_COMM_WORLD_RANK", "OMPI_COMM_WORLD_SIZE",
+          "OMPI_COMM_WORLD_LOCAL_RANK", "OMPI_COMM_WORLD_LOCAL_SIZE",
+          "OMPI_COMM_WORLD_NODE_RANK", "OMPI_UNIVERSE_SIZE"};
+      std::string env_prefix = "env";
+      for (const char* var : mpi_vars) {
+        if (has_env(var)) env_prefix += std::string(" -u ") + var;
+      }
+      return std::system((env_prefix + " " + build_launcher_cmd(cmd)).c_str());
     }
 
     std::string             _input_file;

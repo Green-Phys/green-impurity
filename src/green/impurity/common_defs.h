@@ -1,21 +1,29 @@
 #ifndef GREEN_IMPURITY_COMMON_DEFS_H
 #define GREEN_IMPURITY_COMMON_DEFS_H
 
-#include <array>
 #include <complex>
-#include <functional>
 #include <string>
-#include <tuple>
-#include <utility>
+#include <type_traits>
 
 #include <Eigen/Dense>
+#include "except.h"
+
 #include <green/grids/transformer_t.h>
 #include <green/ndarray/ndarray_math.h>
-#include <green/params/params.h>
 #include <green/symmetry/symmetry.h>
-#include <green/utils/mpi_shared.h>
 
 namespace green::impurity {
+
+  enum class impurity_solver_type { ED, INCHWORM, GW };
+
+  inline impurity_solver_type parse_impurity_solver_type(const std::string& s) {
+    if (s == "ED") return impurity_solver_type::ED;
+    if (s == "INCHWORM") return impurity_solver_type::INCHWORM;
+    if (s == "GW") return impurity_solver_type::GW;
+    throw incorr_impurity_solver_type("Unknown impurity_solver type '" + s +
+                                      "'. Valid options are: ED, INCHWORM, GW.");
+  }
+
   template <size_t N>
   using ztensor = ndarray::ndarray<std::complex<double>, N>;
   template <size_t N>

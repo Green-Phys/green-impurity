@@ -8,6 +8,7 @@ namespace green::impurity {
   ztensor<4> compute_hyb_fun(const ztensor<1>& freqs, const dtensor<2>& bath, const itensor<1>& bath_structure, size_t ns,
                               size_t nio) {
     ztensor<4> hyb(freqs.size(), ns, nio, nio);
+    hyb.set_zero();
     for (size_t iw = 0; iw < freqs.size(); ++iw) {
       for (size_t is = 0; is < ns; ++is) {
         size_t shift = 0;
