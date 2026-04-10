@@ -71,7 +71,7 @@ void impurity_solver_test(std::string impurity_solver_type, std::string dc_data_
   p.define<bool>("spin_symm", "", false);
   p.define<std::string>("bath_file", "", bath_file);
   p.define<std::string>("impurity_solver", "", impurity_solver_type);
-  p.define<std::string>("impurity_solver_exec", "", "/bin/true");
+  p.define<std::string>("impurity_solver_exec", "", TRUE_EXECUTABLE);
   p.define<std::string>("impurity_solver_params", "", "");
   p.define<std::string>("dc_data_prefix", "", dc_data_prefix);
   p.define<std::string>("seet_root_dir", "", TEST_PATH + ""s);
