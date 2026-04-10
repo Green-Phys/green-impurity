@@ -15,9 +15,12 @@ list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 add_executable(bath_fitting_test bath_fitting_test.cpp )
 target_compile_definitions(bath_fitting_test PRIVATE TEST_PATH="${CMAKE_CURRENT_SOURCE_DIR}/data"
         GRID_PATH="${grids_SOURCE_DIR}/data")
+find_program(TRUE_EXECUTABLE true REQUIRED)
+
 add_executable(impurity_test impurity_solver_test.cpp )
 target_compile_definitions(impurity_test PRIVATE TEST_PATH="${CMAKE_CURRENT_SOURCE_DIR}/data"
-        GRID_PATH="${grids_SOURCE_DIR}/data")
+        GRID_PATH="${grids_SOURCE_DIR}/data"
+        TRUE_EXECUTABLE="${TRUE_EXECUTABLE}")
 target_link_libraries(bath_fitting_test PRIVATE Catch2::Catch2WithMain GREEN::IMPURITY)
 target_link_libraries(impurity_test PRIVATE Catch2::Catch2 GREEN::IMPURITY)
 
