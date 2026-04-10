@@ -1,5 +1,8 @@
-#include <fstream>
+#include <array>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <numeric>
 #include <string>
 #include "green/impurity/gw_impurity_solver.h"
 

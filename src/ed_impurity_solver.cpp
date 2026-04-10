@@ -1,5 +1,6 @@
 #include <green/impurity/ed_impurity_solver.h>
 
+#include <filesystem>
 #include <fstream>
 #include <numeric>
 

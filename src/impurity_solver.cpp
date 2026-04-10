@@ -3,6 +3,8 @@
 #include <green/impurity/inchworm_impurity_solver.h>
 #include <green/impurity/gw_impurity_solver.h>
 
+#include <filesystem>
+
 namespace green::impurity {
 
   impurity_solver::impurity_solver(const green::params::params& p, const grids::transformer_t& ft,

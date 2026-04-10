@@ -1,14 +1,19 @@
 #ifndef GREEN_IMPURITY_COMMON_DEFS_H
 #define GREEN_IMPURITY_COMMON_DEFS_H
 
-#include <Eigen/Dense>
-#include <green/params/params.h>
-#include <green/utils/mpi_shared.h>
-
+#include <array>
+#include <complex>
+#include <functional>
+#include <string>
 #include <tuple>
-#include <green/ndarray/ndarray_math.h>
+#include <utility>
+
+#include <Eigen/Dense>
 #include <green/grids/transformer_t.h>
+#include <green/ndarray/ndarray_math.h>
+#include <green/params/params.h>
 #include <green/symmetry/symmetry.h>
+#include <green/utils/mpi_shared.h>
 
 namespace green::impurity {
   template <size_t N>
