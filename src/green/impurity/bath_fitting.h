@@ -22,20 +22,11 @@
 #ifndef GREEN_ED_BATH_FITTING_H
 #define GREEN_ED_BATH_FITTING_H
 
-#include <green/ndarray/ndarray.h>
-#include <green/ndarray/ndarray_math.h>
-
-#include <complex>
 #include <lsqcpp/lsqcpp.hpp>
 
-namespace green::impurity {
+#include "common_defs.h"
 
-  template <size_t N>
-  using ztensor = green::ndarray::ndarray<std::complex<double>, N>;
-  template <size_t N>
-  using dtensor = green::ndarray::ndarray<double, N>;
-  template <size_t N>
-  using itensor = green::ndarray::ndarray<int, N>;
+namespace green::impurity {
 
   template <typename T, size_t D>
   std::array<size_t, D + 1> operator+(const std::array<size_t, D>& a, T b) {
