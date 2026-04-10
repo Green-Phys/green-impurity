@@ -38,8 +38,21 @@ namespace green::impurity {
     impurity_solver(const green::params::params& p, const grids::transformer_t& ft, const bz_utils_t& bz_utils,
                     const green_dc_func& dc_func);
 
+    /**
+     * Solve all impurity problems and return the total impurity self-energy correction.
+     *
+     * @param mu         chemical potential
+     * @param ovlp       overlap matrix (local, orthogonal basis)
+     * @param h_core     one-body Hamiltonian (local)
+     * @param sigma_inf_weak  static self-energy from the weak-coupling solver (HF/GW)
+     * @param sigma_inf_full  full static self-energy including impurity corrections from previous iterations
+     * @param sigma      dynamic self-energy (tau, local)
+     * @param g          Green's function (tau, local)
+     * @return (sigma_inf_imp, sigma_tau_imp): impurity correction to static and dynamic self-energy,
+     *         with double-counting already subtracted, ready to be added to the weak-coupling result
+     */
     std::tuple<ztensor<3>, ztensor<4>> solve(double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
-                                             const ztensor<3>& sigma_inf, const ztensor<3>& sigma_inf_full,
+                                             const ztensor<3>& sigma_inf_weak, const ztensor<3>& sigma_inf_full,
                                              const ztensor<4>& sigma, const ztensor<4>& g) const;
 
   private:
@@ -53,24 +66,30 @@ namespace green::impurity {
     green_dc_func               _dc_solver;
     std::string                 _dc_data_prefix;
 
-    std::tuple<ztensor<3>, ztensor<4>> solve_imp(size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff,
-                                                 const dtensor<4>& interaction, const ztensor<3>& sigma_inf,
-                                                 const ztensor<4>& sigma_w, const ztensor<4>& g_w) const;
-
-    std::tuple<ztensor<3>, ztensor<4>> extract_delta(double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
-                                                     const ztensor<3>& sigma_inf, const ztensor<4>& sigma_w,
-                                                     const ztensor<4>& g_w) const;
+    /**
+     * Extract the bath hybridization function Delta(iw) from the impurity and local Green's functions.
+     *
+     * Implements:  Delta(iw) = G_imp^{-1}(iw) - G_loc^{-1}(iw)
+     * where        G_imp^{-1}(iw) = (iw + mu)*S - fock_act_loc - Sigma_w
+     * and          fock_act_loc = h_core + sigma_inf_full  (Python's F_act_loc)
+     *
+     * Returns (delta_1, delta_w): static offset and frequency-dependent bath hybridization.
+     */
+    std::tuple<ztensor<3>, ztensor<4>> extract_delta(double mu, const ztensor<3>& ovlp,
+                                                     const ztensor<3>& fock_act_loc,
+                                                     const ztensor<4>& sigma_w, const ztensor<4>& g_w) const;
 
     /**
-     * Project impurity quantities to active space
-     * @param mu chemical potential
-     * @param ovlp overlap matrix
-     * @param h_core kinetic Hamiltonian
-     * @param sigma_inf impurity static self-energy
-     * @param sigma impurity dynamic self-energy
-     * @param g impurity Green's function
-     * @param UU transformation to active space
-     * @return tuple of projected (ovlp, h_core, sigma_inf, g, sigma)
+     * Project quantities from the orthogonal full space to the active space (AS).
+     *
+     * @param mu           chemical potential
+     * @param ovlp         overlap
+     * @param h_core       one-body Hamiltonian
+     * @param sigma_inf    weak static self-energy to be projected
+     * @param sigma        dynamic self-energy (tau)
+     * @param g            Green's function (tau)
+     * @param UU           active-space projection matrix (naso x nso)
+     * @return tuple (ovlp_as, h_core_as, sigma_inf_as, g_as, sigma_as)
      */
     std::tuple<ztensor<3>, ztensor<3>, ztensor<3>, ztensor<4>, ztensor<4>> project_to_as(
         double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core, const ztensor<3>& sigma_inf, const ztensor<4>& sigma,

@@ -47,29 +47,23 @@ namespace green::impurity {
     }
   }
 
-  std::tuple<ztensor<3>, ztensor<4>> impurity_solver::solve_imp(size_t imp_n, double mu, const ztensor<3>& ovlp,
-                                                                 const ztensor<3>& hcore_eff, const dtensor<4>& interaction,
-                                                                 const ztensor<3>& sigma_inf, const ztensor<4>& sigma_w,
-                                                                 const ztensor<4>& g_w) const {
-    auto [delta_1, delta_w] = extract_delta(mu, ovlp, hcore_eff, sigma_inf, sigma_w, g_w);
-    return _impurity_call(imp_n, mu, ovlp, hcore_eff, delta_1, delta_w, interaction, g_w);
-  }
-
   std::tuple<ztensor<3>, ztensor<4>> impurity_solver::extract_delta(double mu, const ztensor<3>& ovlp,
-                                                                     const ztensor<3>& h_core, const ztensor<3>& sigma_inf,
+                                                                     const ztensor<3>& fock_act_loc,
                                                                      const ztensor<4>& sigma_w,
                                                                      const ztensor<4>& g_w) const {
     size_t     nw   = g_w.shape()[0];
     size_t     ns   = g_w.shape()[1];
     size_t     naso = g_w.shape()[2];
-    ztensor<3> delta_1(h_core.shape());
+    ztensor<3> delta_1(fock_act_loc.shape());
     ztensor<4> delta(g_w.shape());
     for (size_t iw = 0; iw < nw; ++iw) {
       for (size_t is = 0; is < ns; ++is) {
-        auto g_inv_w_imp = matrix(ovlp(is)) * (_ft.wsample_fermi()(iw) * 1.0i + mu) - matrix(h_core(is)) -
-                           matrix(sigma_inf(is)) - matrix(sigma_w(iw, is));
-        auto g_inv_w_loc      = matrix(g_w(iw, is)).inverse().eval();
-        matrix(delta(iw, is)) = g_inv_w_imp - g_inv_w_loc;
+        // G_imp^{-1}(iw) = (iw + mu)*S - F_act_loc - Sigma_w
+        // F_act_loc = h_core + sigma_inf_full  (matches Python's F_act_loc = h_core + Sigma1_full)
+        auto g_inv_imp        = matrix(ovlp(is)) * (_ft.wsample_fermi()(iw) * 1.0i + mu) -
+                                matrix(fock_act_loc(is)) - matrix(sigma_w(iw, is));
+        auto g_inv_loc        = matrix(g_w(iw, is)).inverse().eval();
+        matrix(delta(iw, is)) = g_inv_imp - g_inv_loc;
       }
     }
     if (_spin_symm) {
@@ -83,7 +77,7 @@ namespace green::impurity {
       }
     }
 
-    // extract constant shift in delta
+    // Extract the static (iw -> inf) offset of delta by fitting the three largest Matsubara points
     grids::MatrixXcd     A(3, 3);
     grids::MatrixXcd     B(3, 1);
     std::complex<double> iwn(0.0, -1. / _ft.wsample_fermi()(nw - 1));
@@ -104,16 +98,19 @@ namespace green::impurity {
   }
 
   std::tuple<ztensor<3>, ztensor<4>> impurity_solver::solve(double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
-                                                             const ztensor<3>& sigma_inf, const ztensor<3>& sigma_inf_full,
+                                                             const ztensor<3>& sigma_inf_weak,
+                                                             const ztensor<3>& sigma_inf_full,
                                                              const ztensor<4>& sigma, const ztensor<4>& g) const {
     if (!std::filesystem::exists(_root)) {
       std::filesystem::create_directory(_root);
     }
-    size_t     nt = _ft.sd().repn_fermi().nts();
-    size_t     ns = ovlp.shape()[0];
-    ztensor<3> sigma_inf_loc_new(sigma_inf.shape());
-    ztensor<4> sigma_w_loc_new(sigma.shape());
+    size_t     nt  = _ft.sd().repn_fermi().nts();
+    size_t     nw  = _ft.sd().repn_fermi().nw();
+    size_t     ns  = ovlp.shape()[0];
+    ztensor<3> sigma_inf_imp_loc(sigma_inf_weak.shape());
+    ztensor<4> sigma_tau_imp_loc(sigma.shape());
     utils::mpi_context mpi_ctx(MPI_COMM_SELF);
+
     for (int imp = 0; imp < _nimp; ++imp) {
       dtensor<2> uu;
       dtensor<4> interaction;
@@ -124,74 +121,73 @@ namespace green::impurity {
         ar.close();
       }
       auto uu_c = uu.astype<std::complex<double>>();
-      auto [ovlp_as, h_core_as, sigma_inf_as, g_as, sigma_as] =
-          project_to_as(mu, ovlp, h_core, sigma_inf, sigma, g, uu_c);
-      size_t     naso = h_core_as.shape()[2];
 
-      // Project the full sigma_inf (weak + impurity corrections from previous iterations)
-      // to the active space. This is passed to extract_delta so the bath hybridization
-      // correctly reflects the previous iteration's impurity correction to the static
-      // self-energy, matching the Python SEET reference where F_act_loc = h_core + sigma_inf_full.
+      // --- Project all quantities to the active space (AS) ---
+      auto [ovlp_as, h_core_as, sigma_inf_weak_as, g_as, sigma_as] =
+          project_to_as(mu, ovlp, h_core, sigma_inf_weak, sigma, g, uu_c);
+      size_t naso = h_core_as.shape()[2];
+
       ztensor<3> sigma_inf_full_as(ns, naso, naso);
-      for (size_t is = 0; is < ns; ++is) {
+      for (size_t is = 0; is < ns; ++is)
         matrix(sigma_inf_full_as(is)) = matrix(uu_c) * matrix(sigma_inf_full(is)) * matrix(uu_c).transpose();
-      }
-      ztensor<4> g_as_w(_ft.sd().repn_fermi().nw(), g_as.shape()[1], g_as.shape()[2], g_as.shape()[3]);
-      ztensor<4> sigma_as_w(_ft.sd().repn_fermi().nw(), sigma_as.shape()[1], sigma_as.shape()[2], sigma_as.shape()[3]);
+
+      // --- Fourier transform G and Sigma from tau to Matsubara ---
+      ztensor<4> g_as_w(nw, ns, naso, naso);
+      ztensor<4> sigma_as_w(nw, ns, naso, naso);
       _ft.tau_to_omega(g_as, g_as_w);
       _ft.tau_to_omega(sigma_as, sigma_as_w);
-      std::array<size_t, 5> shape_in{nt, ns, 1, naso, naso};
-      std::array<size_t, 4> shape_in_inf{ns, 1, naso, naso};
-      std::array<size_t, 4> shape_out{nt, ns, naso, naso};
-      std::array<size_t, 3> shape_out_inf{ns, naso, naso};
 
-      utils::shared_object<ztensor<5>> sigma_dc(shape_in, mpi_ctx);
-      utils::shared_object<ztensor<5>> g_dc(shape_in, mpi_ctx);
-      sigma_dc.fence();
-      sigma_dc.object().set_zero();
-      sigma_dc.fence();
-      g_dc.fence();
-      g_dc.object() << g_as.reshape(shape_in);
-      g_dc.fence();
+      // --- Compute double-counting (DC) self-energy ---
+      std::array<size_t, 5> shape5{nt, ns, 1, naso, naso};
+      std::array<size_t, 4> shape4_inf{ns, 1, naso, naso};
+      utils::shared_object<ztensor<5>> sigma_dc(shape5, mpi_ctx);
+      utils::shared_object<ztensor<5>> g_dc(shape5, mpi_ctx);
+      sigma_dc.fence(); sigma_dc.object().set_zero(); sigma_dc.fence();
+      g_dc.fence(); g_dc.object() << g_as.reshape(shape5); g_dc.fence();
 
-      // Compute DC self-energy before calling the impurity solver so that
-      // sigma_inf_dc is available for constructing H0_imp = h_core + sigma_inf - sigma_inf_dc
-      ztensor<4> sigma_inf_dc(shape_in_inf);
+      ztensor<4> sigma_inf_dc(shape4_inf);
       _dc_solver(_dc_data_prefix, imp, g_dc, sigma_inf_dc, sigma_dc);
 
-      // Effective impurity Hamiltonian: H0_imp = h_core + Re(sigma_inf - sigma_inf_dc) (+ delta_1 static hybridization).
-      // The imaginary part is discarded because the ED Hamiltonian must be real; sigma_inf and sigma_inf_dc are
-      // Hermitian so their difference should be real in a proper basis.
-      ztensor<3> sigma_inf_dc_3d(shape_out_inf);
-      sigma_inf_dc_3d << sigma_inf_dc.reshape(shape_out_inf);
+      std::array<size_t, 3> shape3{ns, naso, naso};
+      std::array<size_t, 4> shape4{nt, ns, naso, naso};
+      ztensor<3> sigma_inf_dc_as(shape3);
+      sigma_inf_dc_as << sigma_inf_dc.reshape(shape3);
+
+      // --- Impurity Hamiltonian: H0_imp = h_core + Re(sigma_inf_weak - sigma_inf_dc) ---
+      // The real part is taken because H0 must be Hermitian for ED; sigma_inf_weak and
+      // sigma_inf_dc are Hermitian so their difference is real in a proper basis.
       ztensor<3> hcore_eff_as(h_core_as.shape());
-      for (size_t is = 0; is < h_core_as.shape()[0]; ++is) {
+      for (size_t is = 0; is < ns; ++is)
         matrix(hcore_eff_as(is)) = matrix(h_core_as(is)) +
-            (matrix(sigma_inf_as(is)) - matrix(sigma_inf_dc_3d(is))).real();
-      }
-      // Use sigma_inf_full_as (not sigma_inf_as/weak) for extract_delta: the full static
-      // self-energy correctly defines G_imp^{-1} = iw*S + mu - hcore_eff - sigma_inf_full - sigma_w,
-      // matching Python's G0_inv = iw + mu - F_act_loc where F_act_loc includes corrections from
-      // previous impurity iterations. sigma_inf_as (weak) is only used for hcore_eff above.
-      auto [sigma_inf_new, sigma_w_new] = solve_imp(imp, mu, ovlp_as, hcore_eff_as, interaction, sigma_inf_full_as, sigma_as_w, g_as_w);
+            (matrix(sigma_inf_weak_as(is)) - matrix(sigma_inf_dc_as(is))).real();
 
-      // Transform impurity solver results from Omega to Tau
-      _ft.omega_to_tau(sigma_w_new, sigma_as);
+      // --- Bath hybridization ---
+      // F_act_loc = h_core + sigma_inf_full  (matches Python's F_act_loc)
+      // G_imp^{-1}(iw) = (iw + mu)*S - F_act_loc - Sigma_w  =>  Delta = G_imp^{-1} - G_loc^{-1}
+      ztensor<3> fock_act_loc_as(h_core_as.shape());
+      for (size_t is = 0; is < ns; ++is)
+        matrix(fock_act_loc_as(is)) = matrix(h_core_as(is)) + matrix(sigma_inf_full_as(is));
 
-      // Update impurity results by subtracting DC sigma
-      sigma_inf_new -= sigma_inf_dc.reshape(shape_out_inf);
-      sigma_as -= sigma_dc.object().reshape(shape_out);
-      for (size_t is = 0; is < ns; ++is) {
-        matrix(sigma_inf_loc_new(is)) += matrix(uu).transpose() * matrix(sigma_inf_new(is)) * matrix(uu);
-      }
-      for (size_t it = 0; it < nt; ++it) {
-        for (size_t is = 0; is < ns; ++is) {
-          matrix(sigma_w_loc_new(it, is)) += matrix(uu).transpose() * matrix(sigma_as(it, is)) * matrix(uu);
-        }
-      }
+      auto [delta_1, delta_w] = extract_delta(mu, ovlp_as, fock_act_loc_as, sigma_as_w, g_as_w);
+
+      // --- Solve the impurity problem ---
+      auto [sigma_inf_imp_as, sigma_w_imp_as] =
+          _impurity_call(imp, mu, ovlp_as, hcore_eff_as, delta_1, delta_w, interaction, g_as_w);
+
+      // --- Subtract DC and back-project to the full space ---
+      _ft.omega_to_tau(sigma_w_imp_as, sigma_as);
+      sigma_inf_imp_as -= sigma_inf_dc_as;
+      sigma_as -= sigma_dc.object().reshape(shape4);
+
+      for (size_t is = 0; is < ns; ++is)
+        matrix(sigma_inf_imp_loc(is)) += matrix(uu).transpose() * matrix(sigma_inf_imp_as(is)) * matrix(uu);
+      for (size_t it = 0; it < nt; ++it)
+        for (size_t is = 0; is < ns; ++is)
+          matrix(sigma_tau_imp_loc(it, is)) += matrix(uu).transpose() * matrix(sigma_as(it, is)) * matrix(uu);
+
       std::cout << "Impurity " << imp << " finished" << std::endl;
     }
-    return std::make_tuple(sigma_inf_loc_new, sigma_w_loc_new);
+    return std::make_tuple(sigma_inf_imp_loc, sigma_tau_imp_loc);
   }
 
   std::tuple<ztensor<3>, ztensor<3>, ztensor<3>, ztensor<4>, ztensor<4>> impurity_solver::project_to_as(
