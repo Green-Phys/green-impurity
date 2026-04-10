@@ -104,8 +104,8 @@ namespace green::impurity {
   }
 
   std::tuple<ztensor<3>, ztensor<4>> impurity_solver::solve(double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
-                                                             const ztensor<3>& sigma_inf, const ztensor<4>& sigma,
-                                                             const ztensor<4>& g) const {
+                                                             const ztensor<3>& sigma_inf, const ztensor<3>& sigma_inf_full,
+                                                             const ztensor<4>& sigma, const ztensor<4>& g) const {
     if (!std::filesystem::exists(_root)) {
       std::filesystem::create_directory(_root);
     }
@@ -123,9 +123,19 @@ namespace green::impurity {
         ar[std::to_string(imp) + "/interaction"] >> interaction;
         ar.close();
       }
+      auto uu_c = uu.astype<std::complex<double>>();
       auto [ovlp_as, h_core_as, sigma_inf_as, g_as, sigma_as] =
-          project_to_as(mu, ovlp, h_core, sigma_inf, sigma, g, uu.astype<std::complex<double>>());
+          project_to_as(mu, ovlp, h_core, sigma_inf, sigma, g, uu_c);
       size_t     naso = h_core_as.shape()[2];
+
+      // Project the full sigma_inf (weak + impurity corrections from previous iterations)
+      // to the active space. This is passed to extract_delta so the bath hybridization
+      // correctly reflects the previous iteration's impurity correction to the static
+      // self-energy, matching the Python SEET reference where F_act_loc = h_core + sigma_inf_full.
+      ztensor<3> sigma_inf_full_as(ns, naso, naso);
+      for (size_t is = 0; is < ns; ++is) {
+        matrix(sigma_inf_full_as(is)) = matrix(uu_c) * matrix(sigma_inf_full(is)) * matrix(uu_c).transpose();
+      }
       ztensor<4> g_as_w(_ft.sd().repn_fermi().nw(), g_as.shape()[1], g_as.shape()[2], g_as.shape()[3]);
       ztensor<4> sigma_as_w(_ft.sd().repn_fermi().nw(), sigma_as.shape()[1], sigma_as.shape()[2], sigma_as.shape()[3]);
       _ft.tau_to_omega(g_as, g_as_w);
@@ -159,7 +169,11 @@ namespace green::impurity {
         matrix(hcore_eff_as(is)) = matrix(h_core_as(is)) +
             (matrix(sigma_inf_as(is)) - matrix(sigma_inf_dc_3d(is))).real();
       }
-      auto [sigma_inf_new, sigma_w_new] = solve_imp(imp, mu, ovlp_as, hcore_eff_as, interaction, sigma_inf_as, sigma_as_w, g_as_w);
+      // Use sigma_inf_full_as (not sigma_inf_as/weak) for extract_delta: the full static
+      // self-energy correctly defines G_imp^{-1} = iw*S + mu - hcore_eff - sigma_inf_full - sigma_w,
+      // matching Python's G0_inv = iw + mu - F_act_loc where F_act_loc includes corrections from
+      // previous impurity iterations. sigma_inf_as (weak) is only used for hcore_eff above.
+      auto [sigma_inf_new, sigma_w_new] = solve_imp(imp, mu, ovlp_as, hcore_eff_as, interaction, sigma_inf_full_as, sigma_as_w, g_as_w);
 
       // Transform impurity solver results from Omega to Tau
       _ft.omega_to_tau(sigma_w_new, sigma_as);

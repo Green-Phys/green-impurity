@@ -39,8 +39,8 @@ namespace green::impurity {
                     const green_dc_func& dc_func);
 
     std::tuple<ztensor<3>, ztensor<4>> solve(double mu, const ztensor<3>& ovlp, const ztensor<3>& h_core,
-                                             const ztensor<3>& sigma_inf, const ztensor<4>& sigma,
-                                             const ztensor<4>& g) const;
+                                             const ztensor<3>& sigma_inf, const ztensor<3>& sigma_inf_full,
+                                             const ztensor<4>& sigma, const ztensor<4>& g) const;
 
   private:
     std::string                 _input_file;

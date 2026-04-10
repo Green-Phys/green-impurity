@@ -21,7 +21,7 @@ namespace green::impurity {
 
     static std::string build_launcher_cmd(const std::string& cmd) {
       if (has_env("SLURM_JOB_ID")) return "srun --ntasks=1 --overlap " + cmd;
-      return "mpirun -np 1 " + cmd;
+      return cmd;
     }
 
     void fit_and_parse_bath(size_t imp_n, const grids::transformer_t& ft, double mu, const ztensor<4>& delta_w,
