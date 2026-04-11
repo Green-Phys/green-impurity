@@ -58,7 +58,8 @@ namespace green::impurity {
   }
 }
 
-void impurity_solver_test(std::string impurity_solver_type, std::string dc_data_prefix = "") {
+void impurity_solver_test(std::string impurity_solver_type, std::string dc_data_prefix = "",
+                          std::string impurity_solver_exec = TRUE_EXECUTABLE) {
   std::string test_file   = TEST_PATH + "/data.h5"s;
   std::string bath_file   = TEST_PATH + "/bath.txt"s;
   std::string input_file   = TEST_PATH + "/transform.h5"s;
@@ -71,10 +72,10 @@ void impurity_solver_test(std::string impurity_solver_type, std::string dc_data_
   p.define<bool>("spin_symm", "", false);
   p.define<std::string>("bath_file", "", bath_file);
   p.define<std::string>("impurity_solver", "", impurity_solver_type);
-  p.define<std::string>("impurity_solver_exec", "", TRUE_EXECUTABLE);
+  p.define<std::string>("impurity_solver_exec", "", impurity_solver_exec);
   p.define<std::string>("impurity_solver_params", "", "");
   p.define<std::string>("dc_data_prefix", "", dc_data_prefix);
-  p.define<std::string>("seet_root_dir", "", TEST_PATH + ""s);
+  p.define<std::string>("seet_root_dir", "", TEST_OUTPUT_PATH + ""s);
   p.define<std::string>("seet_input", "", input_file);
   if (impurity_solver_type == "INCHWORM") {
     p.define<std::string>("itermax", "", "1");
@@ -128,13 +129,21 @@ void impurity_solver_test(std::string impurity_solver_type, std::string dc_data_
 }
 
 TEST_CASE("Impurity Solver") {
+  // All solver output goes to a dedicated scratch directory in the build tree,
+  // so the source-tree test/data/ fixtures are never mutated.
+  std::filesystem::remove_all(TEST_OUTPUT_PATH);
+  std::filesystem::create_directories(TEST_OUTPUT_PATH);
+
   SECTION("ED") {
-    impurity_solver_test("ED");
+    // ED_FAKE_EXECUTABLE is a tiny helper (test/ed_test.cpp) that writes
+    // zero-valued results/Sigma_{inf_ij,ij} so the solver's post-run read
+    // succeeds and the full solver code path is exercised.
+    impurity_solver_test("ED", "", ED_FAKE_EXECUTABLE);
     // Verify that ed.{imp}.input.h5 was written with correct structure.
     // nb=8 for imp 0 (bath_structure=[4,4]), nb=4 for imp 1 (bath_structure=[2,2]), nio=2 for both.
     const std::array<size_t, 2> expected_nb = {8, 4};
     for (int imp = 0; imp < 2; ++imp) {
-      std::string ed_file = TEST_PATH + "/ed."s + std::to_string(imp) + ".input.h5";
+      std::string ed_file = TEST_OUTPUT_PATH + "/ed."s + std::to_string(imp) + ".input.h5";
       REQUIRE(std::filesystem::exists(ed_file));
       green::h5pp::archive ar(ed_file, "r");
       // Bath discretization: Epsk has shape (nb, ns)
@@ -147,11 +156,7 @@ TEST_CASE("Impurity Solver") {
       REQUIRE(interaction.shape()[2] == 2);
       REQUIRE(interaction.shape()[3] == 2);
     }
-    // Cleanup
-    for (int imp = 0; imp < 2; ++imp) {
-      std::filesystem::remove(TEST_PATH + "/ed."s + std::to_string(imp) + ".input.h5");
-    }
-    std::filesystem::remove(TEST_PATH + "/bath.dat"s);
+    std::filesystem::remove_all(TEST_OUTPUT_PATH);
   }
 
   SECTION("INCHWORM") {
@@ -297,7 +302,7 @@ TEST_CASE("Impurity Solver") {
     // Both impurities have nio=2; we use naux=1 and chunk_size=1 to keep fixtures small.
     // The GW solver reads: dummy.h5 (params/nao, params/nso, params/NQ),
     //   meta.h5 (chunk_size), VQ_0.h5 ("0": chunk_size*naux*nio*nio complex doubles).
-    std::string dc_prefix = TEST_PATH + "/dc"s;
+    std::string dc_prefix = TEST_OUTPUT_PATH + "/dc"s;
     for (int imp = 0; imp < 2; ++imp) {
       std::string dc_dir = dc_prefix + "." + std::to_string(imp);
       std::filesystem::create_directories(dc_dir);
@@ -325,7 +330,7 @@ TEST_CASE("Impurity Solver") {
     // nao_eff = nio + nb: imp 0 has nb=8 -> nao_eff=10; imp 1 has nb=4 -> nao_eff=6.
     const std::array<size_t, 2> expected_nao_eff = {10, 6};
     for (int imp = 0; imp < 2; ++imp) {
-      std::string prefix = TEST_PATH + "/gw."s + std::to_string(imp);
+      std::string prefix = TEST_OUTPUT_PATH + "/gw."s + std::to_string(imp);
       REQUIRE(std::filesystem::exists(prefix + ".input.h5"));
       REQUIRE(std::filesystem::exists(prefix + ".sim.h5"));
 
@@ -357,14 +362,20 @@ TEST_CASE("Impurity Solver") {
       }
     }
 
-    // Cleanup
-    for (int imp = 0; imp < 2; ++imp) {
-      std::filesystem::remove_all(dc_prefix + "." + std::to_string(imp));
-      std::string prefix = TEST_PATH + "/gw."s + std::to_string(imp);
-      std::filesystem::remove(prefix + ".input.h5");
-      std::filesystem::remove(prefix + ".sim.h5");
-      std::filesystem::remove_all(prefix + ".df_int");
-    }
+    std::filesystem::remove_all(TEST_OUTPUT_PATH);
+  }
+
+  SECTION("Exception Handling") {
+    // Unknown impurity_solver string: parse_impurity_solver_type() throws
+    // incorr_impurity_solver_type from the impurity_solver constructor before
+    // any child process is launched.
+    REQUIRE_THROWS_AS(impurity_solver_test("XYZ"), green::impurity::incorr_impurity_solver_type);
+    // Use some random executable (does not exist) to run ED solver
+    // should throw an error in execution
+    REQUIRE_THROWS_AS(impurity_solver_test("ED", "", "abc.exe"), green::impurity::impurity_solver_exec_error);
+    // Use /bin/true
+    // a legit executable that runs correctly, but does not generate output
+    REQUIRE_THROWS_AS(impurity_solver_test("ED", ""), green::impurity::impurity_result_not_found);
   }
 }
 
