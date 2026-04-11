@@ -268,7 +268,10 @@ namespace green::impurity {
     }
     ztensor<4> vq_old(chunk_size, naux, nio, nio);
     h5pp::archive int_data_dc(vq_file_dc, "r");
-    int_data_dc["0"] >> vq_old.view<double>();
+    // C++11 [complex.numbers] §26.4 guarantees std::complex<T> is layout-compatible with T[2],
+    // so reinterpret_cast<double*> is well-defined and is the correct way to read a flat
+    // double dataset from HDF5 into a complex ndarray without a shape-rank mismatch.
+    int_data_dc["0"] >> reinterpret_cast<double*>(vq_old.data());
     int_data_dc.close();
     ztensor<4> vq_new(chunk_size, naux, nao_eff, nao_eff);
     vq_new.set_zero();
