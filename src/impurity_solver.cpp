@@ -53,6 +53,8 @@ namespace green::impurity {
         };
         break;
       }
+      // No default: parse_impurity_solver_type() throws incorr_impurity_solver_type
+      // for any unrecognised value before this switch is reached.
     }
   }
 

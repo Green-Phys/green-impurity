@@ -29,22 +29,22 @@ namespace green::impurity {
     // One-body term
     // Static:
     {
-      std::ofstream hopping_file("imp_" + std::to_string(imp_n) + "_hopping.txt");
+      std::ofstream onebody_file("imp_" + std::to_string(imp_n) + "_hopping.txt");
       for (size_t i = 0; i < nio; ++i) {
         for (size_t s1 = 0; s1 < ns; ++s1) {
           for (size_t j = 0; j < nio; ++j) {
             for (size_t s2 = 0; s2 < ns; ++s2) {
               auto h_imp = hcore_eff(s1, i, j) + delta_1(s1, i, j);
-              hopping_file << i * ns + s1 << " " << j * ns + s2 << " ";
+              onebody_file << i * ns + s1 << " " << j * ns + s2 << " ";
               if (s1 == s2)
-                hopping_file << h_imp.real() << " " << h_imp.imag() << "\n";
+                onebody_file << h_imp.real() << " " << h_imp.imag() << "\n";
               else
-                hopping_file << 0.0 << " " << 0.0 << "\n";
+                onebody_file << 0.0 << " " << 0.0 << "\n";
             }
           }
         }
       }
-      hopping_file.close();
+      onebody_file.close();
     }
     // Dynamic
     {
