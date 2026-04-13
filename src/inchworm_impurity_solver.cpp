@@ -2,6 +2,8 @@
 
 #include <fstream>
 #include <iostream>
+#include <iomanip>
+#include <limits>
 
 namespace green::impurity {
 
@@ -30,11 +32,12 @@ namespace green::impurity {
     // Static:
     {
       std::ofstream onebody_file("imp_" + std::to_string(imp_n) + "_hopping.txt");
+      onebody_file << std::setprecision(std::numeric_limits<double>::max_digits10);
       for (size_t i = 0; i < nio; ++i) {
         for (size_t s1 = 0; s1 < ns; ++s1) {
           for (size_t j = 0; j < nio; ++j) {
             for (size_t s2 = 0; s2 < ns; ++s2) {
-              auto h_imp = hcore_eff(s1, i, j) + delta_1(s1, i, j);
+              auto h_imp = hcore_eff(s1, i, j) + delta_1(s1, i, j) - mu * ovlp(s1, i, j);
               onebody_file << i * ns + s1 << " " << j * ns + s2 << " ";
               if (s1 == s2)
                 onebody_file << h_imp.real() << " " << h_imp.imag() << "\n";
@@ -55,6 +58,7 @@ namespace green::impurity {
       CMMatrixXcd delta_w_m(delta_w.data(), delta_w.shape()[0], ns * nio * nio);
       delta_t_m = Ttc_even * Tcn * delta_w_m * std::sqrt(2.0 / ft.sd().beta());
       std::ofstream delta_file("imp_" + std::to_string(imp_n) + "_delta.txt");
+      delta_file << std::setprecision(std::numeric_limits<double>::max_digits10);
       for (size_t t = 0; t < delta_t.shape()[0]; ++t) {
         for (size_t i = 0; i < nio; ++i) {
           for (size_t s1 = 0; s1 < ns; ++s1) {
@@ -110,6 +114,9 @@ namespace green::impurity {
       std::ofstream U_file_cthyb("imp_" + std::to_string(imp_n) + "_Uijkl_cthyb.txt");
       std::ofstream U_file_phys("imp_" + std::to_string(imp_n) + "_Uijkl_phys.txt");
       std::ofstream U_file_chem("imp_" + std::to_string(imp_n) + "_Uijkl_chem.txt");
+      U_file_cthyb << std::setprecision(std::numeric_limits<double>::max_digits10);
+      U_file_phys  << std::setprecision(std::numeric_limits<double>::max_digits10);
+      U_file_chem  << std::setprecision(std::numeric_limits<double>::max_digits10);
       U_file_cthyb << non_zero << "\n";
       U_file_phys << non_zero << "\n";
       U_file_chem << non_zero << "\n";
