@@ -15,9 +15,20 @@ list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 add_executable(bath_fitting_test bath_fitting_test.cpp )
 target_compile_definitions(bath_fitting_test PRIVATE TEST_PATH="${CMAKE_CURRENT_SOURCE_DIR}/data"
         GRID_PATH="${grids_SOURCE_DIR}/data")
+find_program(TRUE_EXECUTABLE true REQUIRED)
+
+# Fake ED impurity solver: writes zero-valued result files so the ED test can
+# exercise the full solver path without depending on an external executable.
+add_executable(ed_test ed_test.cpp)
+target_link_libraries(ed_test PRIVATE GREEN::IMPURITY)
+
 add_executable(impurity_test impurity_solver_test.cpp )
 target_compile_definitions(impurity_test PRIVATE TEST_PATH="${CMAKE_CURRENT_SOURCE_DIR}/data"
-        GRID_PATH="${grids_SOURCE_DIR}/data")
+        TEST_OUTPUT_PATH="${CMAKE_CURRENT_BINARY_DIR}/impurity_test_output"
+        GRID_PATH="${grids_SOURCE_DIR}/data"
+        TRUE_EXECUTABLE="${TRUE_EXECUTABLE}"
+        ED_FAKE_EXECUTABLE="$<TARGET_FILE:ed_test>")
+add_dependencies(impurity_test ed_test)
 target_link_libraries(bath_fitting_test PRIVATE Catch2::Catch2WithMain GREEN::IMPURITY)
 target_link_libraries(impurity_test PRIVATE Catch2::Catch2 GREEN::IMPURITY)
 

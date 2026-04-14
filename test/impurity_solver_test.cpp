@@ -58,7 +58,8 @@ namespace green::impurity {
   }
 }
 
-void impurity_solver_test(std::string impurity_solver_type) {
+void impurity_solver_test(std::string impurity_solver_type, std::string dc_data_prefix = "",
+                          std::string impurity_solver_exec = TRUE_EXECUTABLE) {
   std::string test_file   = TEST_PATH + "/data.h5"s;
   std::string bath_file   = TEST_PATH + "/bath.txt"s;
   std::string input_file   = TEST_PATH + "/transform.h5"s;
@@ -71,10 +72,10 @@ void impurity_solver_test(std::string impurity_solver_type) {
   p.define<bool>("spin_symm", "", false);
   p.define<std::string>("bath_file", "", bath_file);
   p.define<std::string>("impurity_solver", "", impurity_solver_type);
-  p.define<std::string>("impurity_solver_exec", "", "/bin/true");
+  p.define<std::string>("impurity_solver_exec", "", impurity_solver_exec);
   p.define<std::string>("impurity_solver_params", "", "");
-  p.define<std::string>("dc_data_prefix", "", "");
-  p.define<std::string>("seet_root_dir", "", TEST_PATH + ""s);
+  p.define<std::string>("dc_data_prefix", "", dc_data_prefix);
+  p.define<std::string>("seet_root_dir", "", TEST_OUTPUT_PATH + ""s);
   p.define<std::string>("seet_input", "", input_file);
   if (impurity_solver_type == "INCHWORM") {
     p.define<std::string>("itermax", "", "1");
@@ -124,11 +125,40 @@ void impurity_solver_test(std::string impurity_solver_type) {
   auto h_core = green::impurity::compute_local_obj(h_core_k, x_k, bz_utils, ns, nso, false);
   auto sigma1 = green::impurity::compute_local_obj(sigma1_k, x_k, bz_utils, ns, nso);
 
-  solver.solve(mu, ovlp, h_core, sigma1, sigma, g);
+  solver.solve(mu, ovlp, h_core, sigma1, sigma1, sigma, g);
 }
 
 TEST_CASE("Impurity Solver") {
-  SECTION("ED") { impurity_solver_test("ED"); }
+  // All solver output goes to a dedicated scratch directory in the build tree,
+  // so the source-tree test/data/ fixtures are never mutated.
+  std::filesystem::remove_all(TEST_OUTPUT_PATH);
+  std::filesystem::create_directories(TEST_OUTPUT_PATH);
+
+  SECTION("ED") {
+    // ED_FAKE_EXECUTABLE is a tiny helper (test/ed_test.cpp) that writes
+    // zero-valued results/Sigma_{inf_ij,ij} so the solver's post-run read
+    // succeeds and the full solver code path is exercised.
+    impurity_solver_test("ED", "", ED_FAKE_EXECUTABLE);
+    // Verify that ed.{imp}.input.h5 was written with correct structure.
+    // nb=8 for imp 0 (bath_structure=[4,4]), nb=4 for imp 1 (bath_structure=[2,2]), nio=2 for both.
+    const std::array<size_t, 2> expected_nb = {8, 4};
+    for (int imp = 0; imp < 2; ++imp) {
+      std::string ed_file = TEST_OUTPUT_PATH + "/ed."s + std::to_string(imp) + ".input.h5";
+      REQUIRE(std::filesystem::exists(ed_file));
+      green::h5pp::archive ar(ed_file, "r");
+      // Bath discretization: Epsk has shape (nb, ns)
+      green::impurity::dtensor<2> epsk;
+      ar["Bath/Epsk/values"] >> epsk;
+      REQUIRE(epsk.shape()[0] == expected_nb[imp]);
+      // Interaction tensor: shape (2, 2, nio, nio, nio, nio), nio=2
+      green::impurity::dtensor<6> interaction;
+      ar["interaction/values"] >> interaction;
+      REQUIRE(interaction.shape()[2] == 2);
+      REQUIRE(interaction.shape()[3] == 2);
+    }
+    std::filesystem::remove_all(TEST_OUTPUT_PATH);
+  }
+
   SECTION("INCHWORM") {
     impurity_solver_test("INCHWORM");
     // Check if Hamiltonian data files were created successfully for all impurities
@@ -265,6 +295,87 @@ TEST_CASE("Impurity Solver") {
     std::filesystem::remove("imp_1_Uijkl_chem.txt");
     std::filesystem::remove("imp_1_Uijkl_phys.txt");
     std::filesystem::remove("imp_1_Uijkl_cthyb.txt");
+  }
+
+  SECTION("GW") {
+    // Create minimal DC integral fixture files for each impurity.
+    // Both impurities have nio=2; we use naux=1 and chunk_size=1 to keep fixtures small.
+    // The GW solver reads: dummy.h5 (params/nao, params/nso, params/NQ),
+    //   meta.h5 (chunk_size), VQ_0.h5 ("0": chunk_size*naux*nio*nio complex doubles).
+    std::string dc_prefix = TEST_OUTPUT_PATH + "/dc"s;
+    for (int imp = 0; imp < 2; ++imp) {
+      std::string dc_dir = dc_prefix + "." + std::to_string(imp);
+      std::filesystem::create_directories(dc_dir);
+      {
+        green::h5pp::archive ar(dc_dir + "/dummy.h5", "w");
+        ar["params/nao"] << (int)2;
+        ar["params/nso"] << (int)2;
+        ar["params/NQ"]  << (size_t)1;
+      }
+      {
+        green::h5pp::archive ar(dc_dir + "/meta.h5", "w");
+        ar["chunk_size"] << (size_t)1;
+      }
+      {
+        // 1 chunk * 1 aux * 2 orb * 2 orb = 4 complex<double> = 8 doubles
+        green::h5pp::archive ar(dc_dir + "/VQ_0.h5", "w");
+        std::vector<double> zeros(8, 0.0);
+        ar["0"] << zeros;
+      }
+    }
+
+    impurity_solver_test("GW", dc_prefix);
+
+    // Verify that gw.{imp}.input.h5 and gw.{imp}.sim.h5 were written for each impurity.
+    // nao_eff = nio + nb: imp 0 has nb=8 -> nao_eff=10; imp 1 has nb=4 -> nao_eff=6.
+    const std::array<size_t, 2> expected_nao_eff = {10, 6};
+    for (int imp = 0; imp < 2; ++imp) {
+      std::string prefix = TEST_OUTPUT_PATH + "/gw."s + std::to_string(imp);
+      REQUIRE(std::filesystem::exists(prefix + ".input.h5"));
+      REQUIRE(std::filesystem::exists(prefix + ".sim.h5"));
+
+      // H-k in the GW input file covers the full impurity+bath system
+      {
+        green::h5pp::archive ar(prefix + ".input.h5", "r");
+        green::impurity::dtensor<5> hk;
+        ar["HF/H-k"] >> hk;
+        REQUIRE(hk.shape()[2] == expected_nao_eff[imp]);
+        REQUIRE(hk.shape()[3] == expected_nao_eff[imp]);
+      }
+
+      // Sim file: self-energy must be zero-initialized and have the right orbital dimension
+      {
+        green::h5pp::archive ar(prefix + ".sim.h5", "r");
+        size_t iter;
+        ar["iter"] >> iter;
+        REQUIRE(iter == 1);
+        green::impurity::ztensor<4> sigma_inf;
+        ar["iter1/Sigma1"] >> sigma_inf;
+        REQUIRE(sigma_inf.shape()[2] == expected_nao_eff[imp]);
+        REQUIRE(sigma_inf.shape()[3] == expected_nao_eff[imp]);
+        bool all_zero = true;
+        for (size_t is = 0; is < sigma_inf.shape()[0] && all_zero; ++is)
+          for (size_t i = 0; i < sigma_inf.shape()[2] && all_zero; ++i)
+            for (size_t j = 0; j < sigma_inf.shape()[3] && all_zero; ++j)
+              if (std::abs(sigma_inf(is, 0, i, j)) > 1e-15) all_zero = false;
+        REQUIRE(all_zero);
+      }
+    }
+
+    std::filesystem::remove_all(TEST_OUTPUT_PATH);
+  }
+
+  SECTION("Exception Handling") {
+    // Unknown impurity_solver string: parse_impurity_solver_type() throws
+    // incorr_impurity_solver_type from the impurity_solver constructor before
+    // any child process is launched.
+    REQUIRE_THROWS_AS(impurity_solver_test("XYZ"), green::impurity::incorr_impurity_solver_type);
+    // Use some random executable (does not exist) to run ED solver
+    // should throw an error in execution
+    REQUIRE_THROWS_AS(impurity_solver_test("ED", "", "abc.exe"), green::impurity::impurity_solver_exec_error);
+    // Use /bin/true
+    // a legit executable that runs correctly, but does not generate output
+    REQUIRE_THROWS_AS(impurity_solver_test("ED", ""), green::impurity::impurity_result_not_found);
   }
 }
 

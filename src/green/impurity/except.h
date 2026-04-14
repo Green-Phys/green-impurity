@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 University of Michigan
+ * Copyright (c) 2024 University of Michigan
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this
  * software and associated documentation files (the "Software"), to deal in the Software
@@ -19,30 +19,29 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef GREEN_INCHWORM_IMPURITY_SOLVER_H
-#define GREEN_INCHWORM_IMPURITY_SOLVER_H
+#ifndef GREEN_IMPURITY_EXCEPT_H
+#define GREEN_IMPURITY_EXCEPT_H
 
-#include "common_defs.h"
+#include <stdexcept>
+#include <string>
 
 namespace green::impurity {
 
-  class inchworm_impurity_solver {
+  class incorr_impurity_solver_type : public std::runtime_error {
   public:
-    inchworm_impurity_solver(const std::string& input_file, const std::string& impurity_solver_exec,
-                             const std::string& impurity_solver_params, const std::string& root);
+    explicit incorr_impurity_solver_type(const std::string& what) : std::runtime_error(what) {}
+  };
 
-    std::tuple<ztensor<3>, ztensor<4>> solve(size_t imp_n, const grids::transformer_t& ft, double mu, const ztensor<3>& ovlp,
-                                             const ztensor<3>& hcore_eff, const ztensor<3>& delta_1, const ztensor<4>& delta_w,
-                                             const dtensor<4>& interaction, const ztensor<4>& g_w) const;
+  class impurity_solver_exec_error : public std::runtime_error {
+  public:
+    explicit impurity_solver_exec_error(const std::string& what) : std::runtime_error(what) {}
+  };
 
-  private:
-    std::string _input_file;
-    std::string _impurity_solver_exec;
-    std::string _impurity_solver_params;
-    std::string _root;
-    size_t      _nimp;
-    dtensor<2>  _uxl;
+  class impurity_result_not_found : public std::runtime_error {
+  public:
+    explicit impurity_result_not_found(const std::string& what) : std::runtime_error(what) {}
   };
 
 }  // namespace green::impurity
-#endif  // GREEN_INCHWORM_IMPURITY_SOLVER_H
+
+#endif  // GREEN_IMPURITY_EXCEPT_H

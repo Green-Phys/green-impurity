@@ -3,15 +3,15 @@ project(GREEN-ED C CXX)
 set(CMAKE_CXX_STANDARD 17)
 
 ################GREEN RELEASE VERSION####################
-set(GREEN_RELEASE origin/main)
+set(GREEN_RELEASE "v0.3.2" CACHE STRING "Release version for Green dependencies")
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 include(GreenDeps)
 
+add_green_dependency(green-utils)
 add_green_dependency(green-ndarray)
 add_green_dependency(green-symmetry)
 add_green_dependency(green-grids)
-add_green_dependency(green-utils)
 find_package(Eigen3 REQUIRED)
 
 add_subdirectory(deps)
