@@ -9,9 +9,9 @@ namespace green::impurity {
 
   ed_impurity_solver::ed_impurity_solver(const std::string& input_file, const std::string& bath_file,
                                          const std::string& impurity_solver_exec, const std::string& impurity_solver_params,
-                                         const std::string& root) :
+                                         const std::string& root, bath_fitting_method bf_method, double bf_freq_cutoff) :
       _input_file(input_file), _impurity_solver_exec(impurity_solver_exec), _impurity_solver_params(impurity_solver_params),
-      _root(root) {
+      _root(root), _bf_method(bf_method), _bf_freq_cutoff(bf_freq_cutoff) {
     size_t        nimp;
     h5pp::archive ar(input_file, "r");
     ar["nimp"] >> nimp;
@@ -55,7 +55,7 @@ namespace green::impurity {
     for (size_t is = 0; is < ns; ++is)
       std::copy(_initial_bath[imp_n](0).begin(), _initial_bath[imp_n](0).end(), initial_bath_tiled(is).begin());
     auto [delta_out, bath_arr] =
-        minimize(ft.sd().repn_fermi().wsample() * 1.0i, delta_w, initial_bath_tiled, _bath_structure[imp_n], 1);
+        minimize(ft.sd().repn_fermi().wsample() * 1.0i, delta_w, initial_bath_tiled, _bath_structure[imp_n], _bf_freq_cutoff, _bf_method);
     {
       std::ofstream ofile(_root + "/bath.dat", std::ios_base::out);
       for (auto b : bath_arr) {

@@ -1,6 +1,10 @@
 #include "green/impurity/bath_fitting.h"
 
+#include <green/h5pp/archive.h>
+
 #include <catch2/catch_test_macros.hpp>
+
+#include <random>
 
 template <size_t N>
 using ztensor = green::ndarray::ndarray<std::complex<double>, N>;
@@ -275,4 +279,97 @@ TEST_CASE("Bath Fitting") {
     REQUIRE(compare_bath(bath(0), new_bath(0), bath_structure));
     REQUIRE(compare_bath(bath(1), new_bath(1), bath_structure));
   }
+}
+
+bool test_noise_stability_for_bath_fitting(green::impurity::bath_fitting_method METHOD) {
+  std::string input_file = std::string(TEST_PATH) + "/ed.0.input.h5";
+
+  // Read Delta/data_in and freq from the HDF5 file
+  ztensor<4> hyb_fun;
+  dtensor<1> freq_real;
+  {
+    green::h5pp::archive ar(input_file, "r");
+    ar["Delta/data_in"] >> hyb_fun;
+    ar["freq"] >> freq_real;
+    ar.close();
+  }
+
+  size_t nw  = hyb_fun.shape()[0];  // 108
+  size_t ns  = hyb_fun.shape()[1];  // 2
+  size_t nio = hyb_fun.shape()[2];  // 2
+
+  // Build complex Matsubara frequencies from real frequency values
+  ztensor<1> freqs(nw);
+  for (size_t iw = 0; iw < nw; ++iw) {
+    freqs(iw) = std::complex<double>(0.0, freq_real(iw));
+  }
+
+  // Set up bath structure: 4 bath sites per orbital
+  size_t     nk = 4;
+  itensor<1> bath_structure(nio);
+  for (size_t io = 0; io < nio; ++io) {
+    bath_structure(io) = nk;
+  }
+
+  // Initial guess: V's and epsilon's for each spin and orbital
+  size_t     nb_per_spin = nio * nk * 2;
+  dtensor<2> initial_guess(ns, nb_per_spin);
+  initial_guess.set_zero();
+  std::mt19937                          gen(42);
+  std::uniform_real_distribution<double> dist_v(0.1, 1.0);
+  std::uniform_real_distribution<double> dist_e(-2.0, 2.0);
+  for (size_t is = 0; is < ns; ++is) {
+    size_t shift = 0;
+    for (size_t io = 0; io < nio; ++io) {
+      for (size_t i = 0; i < nk; ++i) {
+        initial_guess(is, shift + i)      = dist_v(gen);
+        initial_guess(is, shift + nk + i) = dist_e(gen);
+      }
+      shift += nk * 2;
+    }
+  }
+
+  // Run minimization on clean data
+  auto [hyb_clean, bath_clean] = green::impurity::minimize(freqs, hyb_fun, initial_guess, bath_structure, -1.0, METHOD);
+
+  // Add 1e-10 noise to the hybridization function
+  ztensor<4>                            hyb_noisy(hyb_fun.shape());
+  std::normal_distribution<double>      noise_dist(0.0, 1e-10);
+  std::mt19937                          noise_gen(123);
+  for (size_t iw = 0; iw < nw; ++iw) {
+    for (size_t is = 0; is < ns; ++is) {
+      for (size_t i = 0; i < nio; ++i) {
+        for (size_t j = 0; j < nio; ++j) {
+          hyb_noisy(iw, is, i, j) = hyb_fun(iw, is, i, j) +
+                                     std::complex<double>(noise_dist(noise_gen), noise_dist(noise_gen));
+        }
+      }
+    }
+  }
+
+  // Run minimization on noisy data with the same initial guess
+  auto [hyb_noisy_fit, bath_noisy] = green::impurity::minimize(freqs, hyb_noisy, initial_guess, bath_structure, -1.0, METHOD);
+
+  // Compare the fitted hybridization functions (not raw bath parameters,
+  // since bath sites with near-zero V have unconstrained epsilon).
+  double tol     = 1e-8;
+  double max_diff = 0.0;
+  for (size_t iw = 0; iw < nw; ++iw) {
+    for (size_t is = 0; is < ns; ++is) {
+      for (size_t io = 0; io < nio; ++io) {
+        double diff = std::abs(hyb_clean(iw, is, io, io) - hyb_noisy_fit(iw, is, io, io));
+        max_diff    = std::max(max_diff, diff);
+      }
+    }
+  }
+  std::cout << "Max hybridization difference (clean vs noisy): " << max_diff << std::endl;
+  return max_diff < tol;
+}
+
+TEST_CASE("New Bath Fitting Stability: Jacobian + Trapezoidal") {
+  REQUIRE(test_noise_stability_for_bath_fitting(green::impurity::NORM_L2_TRAPZ));
+}
+
+TEST_CASE("Legacy Bath Fitting Stability: Scalar + norm", "[.][legacy bath fitting][sensitive to noise]") {
+  REQUIRE_FALSE(test_noise_stability_for_bath_fitting(green::impurity::NORM_LINF));
 }
