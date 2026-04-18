@@ -11,23 +11,31 @@ namespace green::impurity {
    * Improve initial guess by analyzing the hybridization function structure.
    * Used by the NORM_L2_TRAPZ method.
    */
-  void improve_initial_guess(const ztensor<1>& freqs, const ztensor<4>& hyb_fun, dtensor<2>& guess,
+  static void improve_initial_guess(const ztensor<1>& freqs, const ztensor<4>& hyb_fun, dtensor<2>& guess,
                              const itensor<1>& bath_structure, size_t is, size_t io) {
     size_t nk = bath_structure(io);
     size_t shift = 0;
     for (size_t j = 0; j < io; ++j) shift += bath_structure(j) * 2;
 
+    // Low-energy window (in Hartree) for estimating hybridization strength.
+    // Fixed; must NOT scale with grid extent, otherwise we'd sample the 1/w tail.
+    double freq_cutoff = 5.0;
+
     // Estimate V scale from hybridization magnitude in middle frequency range
     double v_mag = 0.0;
     size_t count = 0;
     for (size_t iw = freqs.size() / 4; iw < 3 * freqs.size() / 4 && iw < freqs.size(); ++iw) {
-      if (std::abs(freqs(iw).imag()) <= 5.0) {
+      if (std::abs(freqs(iw).imag()) <= freq_cutoff) {
         v_mag += std::abs(hyb_fun(iw, is, io, io).imag());
         count++;
       }
     }
     if (count > 0) v_mag /= count;
     double v_scale = std::sqrt(std::max(v_mag / nk, 1e-3));
+    // Clamp to keep the optimizer seed in a regime with informative gradients:
+    //   - floor 0.15: near-zero V gives vanishing gradients (quadratic in V)
+    //   - ceil  2.0:  oversized V overshoots the target, causing slow convergence
+    // These bounds only affect the initial guess; the optimizer moves freely afterward.
     v_scale = std::clamp(v_scale, 0.15, 2.0);
 
     // Set V parameters with scaling
@@ -35,7 +43,8 @@ namespace green::impurity {
       guess(is, shift + i) = v_scale * (0.3 + 0.5 * i / std::max(nk - 1.0, 1.0));
     }
 
-    // Distribute energy parameters across typical range based on frequency extent
+    // Spread initial bath energies across [-2, 2] (typical bandwidth scale).
+    // Only an initial guess — the optimizer shifts them to match the hybridization.
     for (size_t i = 0; i < nk; ++i) {
       double frac = (nk > 1) ? static_cast<double>(i) / (nk - 1) : 0.5;
       guess(is, shift + nk + i) = -2.0 + 4.0 * frac;
@@ -108,8 +117,8 @@ namespace green::impurity {
    * Uses improved initial guess and trapezoidal frequency weighting.
    */
   static std::pair<ztensor<4>, dtensor<2>> minimize_jacobian(const ztensor<1>& freqs, const ztensor<4>& hyb_fun,
-                                                              const dtensor<2>& initial_guess,
-                                                              const itensor<1>& bath_structure, double freq_cutoff) {
+                                                             const dtensor<2>& initial_guess, const itensor<1>& bath_structure,
+                                                             double freq_cutoff) {
     size_t     ns  = hyb_fun.shape()[1];
     size_t     nio = hyb_fun.shape()[3];
     dtensor<2> res(ns, std::reduce(bath_structure.begin(), bath_structure.end()) * 2);

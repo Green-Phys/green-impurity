@@ -122,24 +122,25 @@ namespace green::impurity {
                     JacType& jacobian) const {
       size_t nk = _bath_structure(_io);
 
-      // Count active frequencies
-      size_t nw_active = 0;
+      // Collect active frequency indices
+      std::vector<size_t> active;
       for (size_t iw = 0; iw < _nw; ++iw) {
         if (_freq_cutoff > 0 && std::abs(_freqs(iw).imag()) > _freq_cutoff) continue;
-        nw_active++;
+        active.push_back(iw);
       }
+      size_t nw_active = active.size();
 
       fval.resize(2 * nw_active);
       jacobian.resize(2 * nw_active, xval.size());
       jacobian.setZero();
 
-      size_t res_idx = 0;
-      for (size_t iw = 0; iw < _nw; ++iw) {
-        if (_freq_cutoff > 0 && std::abs(_freqs(iw).imag()) > _freq_cutoff) continue;
+      std::complex<double>              hyb;
+      std::vector<std::complex<double>> dhydb_dv(nk);
+      std::vector<std::complex<double>> dhydb_de(nk);
 
-        std::complex<double>                hyb(0, 0);
-        std::vector<std::complex<double>> dhydb_dv(nk);
-        std::vector<std::complex<double>> dhydb_de(nk);
+      for (size_t ai = 0; ai < nw_active; ++ai) {
+        size_t iw = active[ai];
+        hyb = 0.0;
 
         for (size_t i = 0; i < nk; ++i) {
           std::complex<double> denom = _freqs(iw) - xval(nk + i);
@@ -148,16 +149,16 @@ namespace green::impurity {
           dhydb_de[i] = (xval(i) * xval(i)) / (denom * denom);
         }
 
-        // Trapezoidal frequency weight
+        // Trapezoidal weight computed over the active (filtered) frequency set
         double weight = 1.0;
-        if (iw > 0 && iw < _nw - 1) {
-          double dw_left  = std::abs(_freqs(iw).imag() - _freqs(iw - 1).imag());
-          double dw_right = std::abs(_freqs(iw + 1).imag() - _freqs(iw).imag());
+        if (ai > 0 && ai < nw_active - 1) {
+          double dw_left  = std::abs(_freqs(active[ai]).imag() - _freqs(active[ai - 1]).imag());
+          double dw_right = std::abs(_freqs(active[ai + 1]).imag() - _freqs(active[ai]).imag());
           weight = (dw_left + dw_right) / 2.0;
-        } else if (iw == 0 && _nw > 1) {
-          weight = std::abs(_freqs(1).imag() - _freqs(0).imag()) / 2.0;
-        } else if (iw == _nw - 1 && _nw > 1) {
-          weight = std::abs(_freqs(_nw - 1).imag() - _freqs(_nw - 2).imag()) / 2.0;
+        } else if (ai == 0 && nw_active > 1) {
+          weight = std::abs(_freqs(active[1]).imag() - _freqs(active[0]).imag()) / 2.0;
+        } else if (ai == nw_active - 1 && nw_active > 1) {
+          weight = std::abs(_freqs(active[nw_active - 1]).imag() - _freqs(active[nw_active - 2]).imag()) / 2.0;
         }
 
         double sqrt_weight = std::sqrt(weight);
@@ -165,6 +166,7 @@ namespace green::impurity {
         std::complex<double> target = _target_delta(iw, _is, _io, _io);
         std::complex<double> diff   = target - hyb;
 
+        size_t res_idx = 2 * ai;
         fval(res_idx)     = sqrt_weight * diff.real();
         fval(res_idx + 1) = sqrt_weight * diff.imag();
 
@@ -177,8 +179,6 @@ namespace green::impurity {
           jacobian(res_idx, nk + i)     = -sqrt_weight * dhydb_de[i].real();
           jacobian(res_idx + 1, nk + i) = -sqrt_weight * dhydb_de[i].imag();
         }
-
-        res_idx += 2;
       }
     }
 
