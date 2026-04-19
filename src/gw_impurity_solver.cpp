@@ -8,9 +8,10 @@ namespace green::impurity {
 
   gw_impurity_solver::gw_impurity_solver(const std::string& input_file, const std::string& bath_file,
                                          const std::string& impurity_solver_exec, const std::string& impurity_solver_params,
-                                         const std::string dc_data_prefix, const std::string& root) :
+                                         const std::string dc_data_prefix, const std::string& root,
+                                         bath_fitting_method bf_method, double bf_freq_cutoff) :
       _input_file(input_file), _impurity_solver_exec(impurity_solver_exec), _impurity_solver_params(impurity_solver_params),
-      _dc_data_prefix(dc_data_prefix), _root(root) {
+      _dc_data_prefix(dc_data_prefix), _root(root), _bf_method(bf_method), _bf_freq_cutoff(bf_freq_cutoff) {
     size_t        ns = 2;  // TODO: This is hardcoded - let it be for now
     size_t        nimp;
     h5pp::archive ar(input_file, "r");
@@ -123,7 +124,7 @@ namespace green::impurity {
     // GW solver (which uses frequency iw, not iw+mu) sees the bath propagator (iw - eps_k_fit)^{-1}
     // = (iw + mu - eps_k_phys)^{-1}, which is correct.
     auto [delta_out, bath_arr] = minimize(
-      ft.sd().repn_fermi().wsample() * 1.0i, delta_w, _initial_bath[imp_n], _bath_structure[imp_n], 1
+      ft.sd().repn_fermi().wsample() * 1.0i, delta_w, _initial_bath[imp_n], _bath_structure[imp_n], _bf_freq_cutoff, _bf_method
     );
     // Read results
     {

@@ -69,6 +69,7 @@ void impurity_solver_test(std::string impurity_solver_type, std::string dc_data_
   green::params::params p;
   green::symmetry::define_parameters(p);
   green::grids::define_parameters(p);
+  green::impurity::define_parameters(p);
   p.define<bool>("spin_symm", "", false);
   p.define<std::string>("bath_file", "", bath_file);
   p.define<std::string>("impurity_solver", "", impurity_solver_type);

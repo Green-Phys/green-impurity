@@ -11,13 +11,16 @@ namespace green::impurity {
                                    const bz_utils_t& bz_utils, const green_dc_func& dc_func) :
       _input_file(p["seet_input"]), _root(p["seet_root_dir"]), _spin_symm(p["spin_symm"]), _ft(ft), _bz_utils(bz_utils),
       _dc_solver(dc_func), _dc_data_prefix(p["dc_data_prefix"]) {
+    bath_fitting_method bf_method       = p["bath_fitting_method"];
+    double              bf_freq_cutoff  = p["bath_fitting_freq_cutoff"];
     h5pp::archive ar(_input_file, "r");
     ar["nimp"] >> _nimp;
     ar.close();
     switch (parse_impurity_solver_type(p["impurity_solver"].as<std::string>())) {
       case impurity_solver_type::ED: {
         std::shared_ptr<void> ed_solver(new ed_impurity_solver(p["seet_input"], p["bath_file"], p["impurity_solver_exec"],
-                                                               p["impurity_solver_params"], p["seet_root_dir"]));
+                                                               p["impurity_solver_params"], p["seet_root_dir"],
+                                                               bf_method, bf_freq_cutoff));
         _impurity_call = [ed_solver, this](size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff,
                                            const ztensor<3>& delta_1, const ztensor<4>& delta_w, const dtensor<4>& interaction,
                                            const ztensor<4>& g_w) -> std::tuple<ztensor<3>, ztensor<4>> {
@@ -44,7 +47,7 @@ namespace green::impurity {
       case impurity_solver_type::GW: {
         std::shared_ptr<void> gw_solver(new gw_impurity_solver(p["seet_input"], p["bath_file"], p["impurity_solver_exec"],
                                                                p["impurity_solver_params"], _dc_data_prefix,
-                                                               p["seet_root_dir"]));
+                                                               p["seet_root_dir"], bf_method, bf_freq_cutoff));
         _impurity_call = [gw_solver, this](size_t imp_n, double mu, const ztensor<3>& ovlp, const ztensor<3>& hcore_eff,
                                            const ztensor<3>& delta_1, const ztensor<4>& delta_w, const dtensor<4>& interaction,
                                            const ztensor<4>& g_w) -> std::tuple<ztensor<3>, ztensor<4>> {
