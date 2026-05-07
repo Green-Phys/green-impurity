@@ -39,7 +39,7 @@ namespace green::impurity {
   using dtensor = ndarray::ndarray<double, N>;
   template <size_t N>
   using itensor    = ndarray::ndarray<int, N>;
-  using bz_utils_t = symmetry::brillouin_zone_utils<symmetry::inv_symm_op>;
+  using bz_utils_t = symmetry::brillouin_zone_utils;
 
   template <typename prec>
   using MMatrixX   = Eigen::Map<Eigen::Matrix<prec, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>;
