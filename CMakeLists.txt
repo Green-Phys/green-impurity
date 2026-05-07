@@ -3,7 +3,8 @@ project(GREEN-ED C CXX)
 set(CMAKE_CXX_STANDARD 17)
 
 ################GREEN RELEASE VERSION####################
-set(GREEN_RELEASE "v0.3.2" CACHE STRING "Release version for Green dependencies")
+#note that this has been updated from 0.3.2 due to dependence on updated symmetry lib
+set(GREEN_RELEASE "origin/main" CACHE STRING "Release version for Green dependencies")
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 include(GreenDeps)
