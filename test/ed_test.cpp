@@ -16,6 +16,7 @@
 
 #include <iostream>
 #include <string>
+#include <vector>
 
 int main(int argc, char** argv) {
   std::string input_file;
@@ -47,16 +48,18 @@ int main(int argc, char** argv) {
   size_t naso = delta_static.shape()[1];
   size_t nw   = delta_in.shape()[0];
 
-  green::impurity::dtensor<3> sigma_inf(ns, naso, naso);
-  green::impurity::ztensor<4> sigma_w(nw, ns, naso, naso);
-  sigma_inf.set_zero();
-  sigma_w.set_zero();
+  // Zero-valued results, written as results/<name>/{data,shape} with a flat
+  // row-major data buffer, matching the real ED solver's output layout.
+  // Sigma_inf_ij is real (ns, naso, naso); Sigma_ij is the real view of the
+  // complex self-energy (nw, ns, naso, naso), i.e. last dim doubled.
+  std::vector<double> sigma_inf(ns * naso * naso, 0.0);
+  std::vector<double> sigma_ij(nw * ns * naso * naso * 2, 0.0);
 
   green::h5pp::archive out(output_file, "w");
-  out["results/Sigma_inf_ij"] << sigma_inf;
-  // ed_impurity_solver reads Sigma_ij via sigma_new.view<double>() (last dim doubled);
-  // write through the same view so on-disk shape matches the read side.
-  out["results/Sigma_ij"] << sigma_w.view<double>();
+  out["results/Sigma_inf_ij/data"]  << sigma_inf;
+  out["results/Sigma_inf_ij/shape"] << std::vector<size_t>{ns, naso, naso};
+  out["results/Sigma_ij/data"]      << sigma_ij;
+  out["results/Sigma_ij/shape"]     << std::vector<size_t>{nw, ns, naso, 2 * naso};
   out.close();
   return 0;
 }

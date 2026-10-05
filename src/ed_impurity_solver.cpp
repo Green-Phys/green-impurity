@@ -161,11 +161,24 @@ namespace green::impurity {
     }
     if (std::filesystem::exists(_root + "/ed." + std::to_string(imp_n) + ".result.h5")) {
       h5pp::archive ar(_root + "/ed." + std::to_string(imp_n) + ".result.h5", "r");
-      dtensor<3>    xxx;
-      ar["results/Sigma_inf_ij"] >> xxx;
-      sigma_inf_new.resize(xxx.shape());
+      // The ED solver stores each result as results/<name>/{data,shape}, where
+      // data is a flat row-major real buffer. Sigma_inf_ij is real (ns, nio,
+      // nio); Sigma_ij is the real view (trailing factor 2) of the complex
+      // self-energy (nw, ns, nio, nio).
+      std::vector<double> sinf_flat, sigma_flat;
+      ar["results/Sigma_inf_ij/data"] >> sinf_flat;
+      ar["results/Sigma_ij/data"]     >> sigma_flat;
+
+      dtensor<3> xxx(sigma_inf_new.shape());
+      if (sinf_flat.size() != xxx.size())
+        throw impurity_result_not_found("ED result Sigma_inf_ij size mismatch");
+      std::copy(sinf_flat.begin(), sinf_flat.end(), xxx.data());
       sigma_inf_new << xxx;
-      ar["results/Sigma_ij"] >> sigma_new.view<double>();
+
+      auto sigma_rv = sigma_new.view<double>();
+      if (sigma_flat.size() != sigma_rv.size())
+        throw impurity_result_not_found("ED result Sigma_ij size mismatch");
+      std::copy(sigma_flat.begin(), sigma_flat.end(), sigma_rv.data());
     } else {
       throw impurity_result_not_found("ED impurity result file not found: " + _root + "/ed." + std::to_string(imp_n) + ".result.h5");
     }
