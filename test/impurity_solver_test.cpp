@@ -24,6 +24,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_session.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
 
 #include <mpi.h>
 #include <filesystem>
@@ -59,7 +60,7 @@ namespace green::impurity {
 }
 
 void impurity_solver_test(std::string impurity_solver_type, std::string dc_data_prefix = "",
-                          std::string impurity_solver_exec = TRUE_EXECUTABLE) {
+                          std::string impurity_solver_exec = TRUE_EXECUTABLE, std::string impurity_solver_params = "") {
   std::string test_file   = TEST_PATH + "/data.h5"s;
   std::string bath_file   = TEST_PATH + "/bath.txt"s;
   std::string input_file   = TEST_PATH + "/transform.h5"s;
@@ -74,7 +75,7 @@ void impurity_solver_test(std::string impurity_solver_type, std::string dc_data_
   p.define<std::string>("bath_file", "", bath_file);
   p.define<std::string>("impurity_solver", "", impurity_solver_type);
   p.define<std::string>("impurity_solver_exec", "", impurity_solver_exec);
-  p.define<std::string>("impurity_solver_params", "", "");
+  p.define<std::string>("impurity_solver_params", "", impurity_solver_params);
   p.define<std::string>("dc_data_prefix", "", dc_data_prefix);
   p.define<std::string>("seet_root_dir", "", TEST_OUTPUT_PATH + ""s);
   p.define<std::string>("seet_input", "", input_file);
@@ -158,6 +159,16 @@ TEST_CASE("Impurity Solver") {
       REQUIRE(interaction.shape()[3] == 2);
     }
     std::filesystem::remove_all(TEST_OUTPUT_PATH);
+  }
+
+  SECTION("ED rejects incompatible static result shape") {
+    REQUIRE_THROWS_WITH(impurity_solver_test("ED", "", ED_FAKE_EXECUTABLE, "--INVALID_SHAPE=Sigma_inf_ij"),
+                        "ED result Sigma_inf_ij shape mismatch");
+  }
+
+  SECTION("ED rejects incompatible dynamic result shape") {
+    REQUIRE_THROWS_WITH(impurity_solver_test("ED", "", ED_FAKE_EXECUTABLE, "--INVALID_SHAPE=Sigma_ij"),
+                        "ED result Sigma_ij shape mismatch");
   }
 
   SECTION("INCHWORM") {
