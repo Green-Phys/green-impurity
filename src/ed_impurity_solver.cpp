@@ -1,6 +1,7 @@
 #include <green/impurity/bath_fitting.h>
 #include <green/impurity/ed_impurity_solver.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <numeric>
@@ -166,16 +167,23 @@ namespace green::impurity {
       // nio); Sigma_ij is the real view (trailing factor 2) of the complex
       // self-energy (nw, ns, nio, nio).
       std::vector<double> sinf_flat, sigma_flat;
+      std::vector<size_t> sinf_shape, sigma_shape;
       ar["results/Sigma_inf_ij/data"] >> sinf_flat;
       ar["results/Sigma_ij/data"]     >> sigma_flat;
+      ar["results/Sigma_inf_ij/shape"] >> sinf_shape;
+      ar["results/Sigma_ij/shape"]     >> sigma_shape;
 
       dtensor<3> xxx(sigma_inf_new.shape());
+      if (!std::equal(sinf_shape.begin(), sinf_shape.end(), xxx.shape().begin(), xxx.shape().end()))
+        throw impurity_result_not_found("ED result Sigma_inf_ij shape mismatch");
       if (sinf_flat.size() != xxx.size())
         throw impurity_result_not_found("ED result Sigma_inf_ij size mismatch");
       std::copy(sinf_flat.begin(), sinf_flat.end(), xxx.data());
       sigma_inf_new << xxx;
 
       auto sigma_rv = sigma_new.view<double>();
+      if (!std::equal(sigma_shape.begin(), sigma_shape.end(), sigma_rv.shape().begin(), sigma_rv.shape().end()))
+        throw impurity_result_not_found("ED result Sigma_ij shape mismatch");
       if (sigma_flat.size() != sigma_rv.size())
         throw impurity_result_not_found("ED result Sigma_ij size mismatch");
       std::copy(sigma_flat.begin(), sigma_flat.end(), sigma_rv.data());

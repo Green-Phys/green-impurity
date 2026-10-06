@@ -21,6 +21,7 @@
 int main(int argc, char** argv) {
   std::string input_file;
   std::string output_file;
+  std::string invalid_shape;
   for (int i = 1; i < argc; ++i) {
     std::string arg(argv[i]);
     auto        eq = arg.find('=');
@@ -29,6 +30,7 @@ int main(int argc, char** argv) {
     std::string val = arg.substr(eq + 1);
     if (key == "--INPUT_FILE") input_file = val;
     else if (key == "--OUTPUT_FILE") output_file = val;
+    else if (key == "--INVALID_SHAPE") invalid_shape = val;
   }
   if (input_file.empty() || output_file.empty()) {
     std::cerr << "ed_test: required args --INPUT_FILE=<path> --OUTPUT_FILE=<path>" << std::endl;
@@ -54,12 +56,17 @@ int main(int argc, char** argv) {
   // complex self-energy (nw, ns, naso, naso), i.e. last dim doubled.
   std::vector<double> sigma_inf(ns * naso * naso, 0.0);
   std::vector<double> sigma_ij(nw * ns * naso * naso * 2, 0.0);
+  std::vector<size_t> sigma_inf_shape{ns, naso, naso};
+  std::vector<size_t> sigma_ij_shape{nw, ns, naso, 2 * naso};
+  // Preserve buffer lengths while changing the layout to exercise shape validation.
+  if (invalid_shape == "Sigma_inf_ij") sigma_inf_shape = {ns, naso * naso, 1};
+  if (invalid_shape == "Sigma_ij") sigma_ij_shape = {nw, ns, 2 * naso, naso};
 
   green::h5pp::archive out(output_file, "w");
   out["results/Sigma_inf_ij/data"]  << sigma_inf;
-  out["results/Sigma_inf_ij/shape"] << std::vector<size_t>{ns, naso, naso};
+  out["results/Sigma_inf_ij/shape"] << sigma_inf_shape;
   out["results/Sigma_ij/data"]      << sigma_ij;
-  out["results/Sigma_ij/shape"]     << std::vector<size_t>{nw, ns, naso, 2 * naso};
+  out["results/Sigma_ij/shape"]     << sigma_ij_shape;
   out.close();
   return 0;
 }
