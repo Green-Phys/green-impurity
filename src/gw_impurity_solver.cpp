@@ -207,9 +207,20 @@ namespace green::impurity {
     data["HF/H-k"] << h0_eff;
     data["HF/Fock-k"] << h0_eff;
     data["HF/S-k"] << Sk_eff;
-    // The copied single-k symmetry transform must also include the bath orbitals.
+    // Preserve the impurity symmetry transform and add an identity bath block.
+    ztensor<3> impurity_transform;
+    data["symmetry/k/k_sym_transform_ao"] >> impurity_transform;
+    ztensor<3> transform(impurity_transform.shape()[0], nao_eff, nao_eff);
+    transform.set_zero();
+    for (size_t ik = 0; ik < transform.shape()[0]; ++ik) {
+      for (size_t i = 0; i < nio; ++i)
+        for (size_t j = 0; j < nio; ++j)
+          transform(ik, i, j) = impurity_transform(ik, i, j);
+      for (size_t i = nio; i < nao_eff; ++i)
+        transform(ik, i, i) = 1.0;
+    }
     H5Ldelete(data.current_id(), "symmetry/k/k_sym_transform_ao", H5P_DEFAULT);
-    data["symmetry/k/k_sym_transform_ao"] << Sk_eff(0);
+    data["symmetry/k/k_sym_transform_ao"] << transform;
     data["HF/Energy_nuc"] << 0.0;
     data["params/nel_cell"] << nio;
     data["params/ink"] << 1;
