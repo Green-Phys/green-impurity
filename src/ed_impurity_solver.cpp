@@ -154,7 +154,6 @@ namespace green::impurity {
                        " --NSPINS=" + std::to_string(2) + " --INPUT_FILE=" + _root + "/ed." + std::to_string(imp_n) +
                        ".input.h5" + " --OUTPUT_FILE=" + _root + "/ed." + std::to_string(imp_n) + ".result.h5" +
                        " --arpack.SECTOR=false --siam.NORBITALS=" + std::to_string(nio) +
-                       " --spinstorage.ORBITAL_NUMBER=" + std::to_string(nio) +
                        " --lanc.BETA=" + std::to_string(ft.sd().beta()));
     int sysresult = std::system(run.c_str());
     if (sysresult != 0) {

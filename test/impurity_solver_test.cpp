@@ -315,6 +315,10 @@ TEST_CASE("Impurity Solver") {
     // The GW solver reads: dummy.h5 (params/nao, params/nso, params/NQ),
     //   meta.h5 (chunk_size), VQ_0.h5 ("0": chunk_size*naux*nio*nio complex doubles).
     std::string dc_prefix = TEST_OUTPUT_PATH + "/dc"s;
+    green::impurity::ztensor<3> impurity_transform(1, 2, 2);
+    impurity_transform.set_zero();
+    impurity_transform(0, 0, 1) = std::complex<double>(0.0, 1.0);
+    impurity_transform(0, 1, 0) = std::complex<double>(0.0, -1.0);
     for (int imp = 0; imp < 2; ++imp) {
       std::string dc_dir = dc_prefix + "." + std::to_string(imp);
       std::filesystem::create_directories(dc_dir);
@@ -323,6 +327,7 @@ TEST_CASE("Impurity Solver") {
         ar["params/nao"] << (int)2;
         ar["params/nso"] << (int)2;
         ar["params/NQ"]  << (size_t)1;
+        ar["symmetry/k/k_sym_transform_ao"] << impurity_transform;
       }
       {
         green::h5pp::archive ar(dc_dir + "/meta.h5", "w");
@@ -349,10 +354,29 @@ TEST_CASE("Impurity Solver") {
       // H-k in the GW input file covers the full impurity+bath system
       {
         green::h5pp::archive ar(prefix + ".input.h5", "r");
-        green::impurity::dtensor<5> hk;
+        green::impurity::ztensor<4> hk, fk, sk;
         ar["HF/H-k"] >> hk;
         REQUIRE(hk.shape()[2] == expected_nao_eff[imp]);
         REQUIRE(hk.shape()[3] == expected_nao_eff[imp]);
+        REQUIRE(ar.get_attribute<std::string>("__green_version__") == "1.1.0");
+        ar["HF/Fock-k"] >> fk;
+        ar["HF/S-k"] >> sk;
+        REQUIRE(fk.shape() == hk.shape());
+        REQUIRE(sk.shape() == hk.shape());
+        for (const auto& name : {"HF/H-k", "HF/Fock-k", "HF/S-k"})
+          REQUIRE_FALSE(ar[name].has_attribute("__complex__"));
+        green::impurity::ztensor<3> transform;
+        ar["symmetry/k/k_sym_transform_ao"] >> transform;
+        REQUIRE(transform.shape() == sk(0).shape());
+        for (size_t is = 0; is < hk.shape()[0]; ++is)
+          for (size_t i = 0; i < expected_nao_eff[imp]; ++i)
+            for (size_t j = 0; j < expected_nao_eff[imp]; ++j) {
+              REQUIRE(fk(is, 0, i, j) == hk(is, 0, i, j));
+              REQUIRE(sk(is, 0, i, j) == std::complex<double>(i == j ? 1.0 : 0.0));
+              const auto expected_transform = (i < 2 && j < 2)
+                  ? impurity_transform(0, i, j) : std::complex<double>(i == j ? 1.0 : 0.0);
+              REQUIRE(transform(0, i, j) == expected_transform);
+            }
       }
 
       // Sim file: self-energy must be zero-initialized and have the right orbital dimension

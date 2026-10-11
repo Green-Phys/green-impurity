@@ -203,14 +203,24 @@ namespace green::impurity {
     std::filesystem::copy_file(_dc_data_prefix + "." + std::to_string(imp_n) + "/dummy.h5", gw_input_file,
                                std::filesystem::copy_options::overwrite_existing);
     h5pp::archive data(gw_input_file, "a");
-    std::array<size_t, 5> new_shape = {ns, 1, nao_eff, nao_eff, 2};
-    data.set_attribute<std::string>("__green_version__", "0.3.2");  // Set version attribute -- hardwired for now
-    data["HF/H-k"] << h0_eff.view<double>().reshape(new_shape);
-    data["HF/H-k"].set_attribute<int>("__complex__", 1);
-    data["HF/Fock-k"] << h0_eff.view<double>().reshape(new_shape);
-    data["HF/Fock-k"].set_attribute<int>("__complex__", 1);
-    data["HF/S-k"] << Sk_eff.view<double>().reshape(new_shape);
-    data["HF/S-k"].set_attribute<int>("__complex__", 1);
+    data.set_attribute<std::string>("__green_version__", "1.1.0");
+    data["HF/H-k"] << h0_eff;
+    data["HF/Fock-k"] << h0_eff;
+    data["HF/S-k"] << Sk_eff;
+    // Preserve the impurity symmetry transform and add an identity bath block.
+    ztensor<3> impurity_transform;
+    data["symmetry/k/k_sym_transform_ao"] >> impurity_transform;
+    ztensor<3> transform(impurity_transform.shape()[0], nao_eff, nao_eff);
+    transform.set_zero();
+    for (size_t ik = 0; ik < transform.shape()[0]; ++ik) {
+      for (size_t i = 0; i < nio; ++i)
+        for (size_t j = 0; j < nio; ++j)
+          transform(ik, i, j) = impurity_transform(ik, i, j);
+      for (size_t i = nio; i < nao_eff; ++i)
+        transform(ik, i, i) = 1.0;
+    }
+    H5Ldelete(data.current_id(), "symmetry/k/k_sym_transform_ao", H5P_DEFAULT);
+    data["symmetry/k/k_sym_transform_ao"] << transform;
     data["HF/Energy_nuc"] << 0.0;
     data["params/nel_cell"] << nio;
     data["params/ink"] << 1;
