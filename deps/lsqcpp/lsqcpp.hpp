@@ -7,6 +7,7 @@
 #ifndef LSQCPP_LSQCPP_HPP_
 #define LSQCPP_LSQCPP_HPP_
 
+#include <cassert>
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
 #include <Eigen/SVD>
