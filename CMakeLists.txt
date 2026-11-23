@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 #note that this has been updated from 0.3.2 due to dependence on updated symmetry lib
 set(GREEN_RELEASE "origin/main" CACHE STRING "Release version for Green dependencies")
 
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 include(GreenDeps)
 
 add_green_dependency(green-utils)
