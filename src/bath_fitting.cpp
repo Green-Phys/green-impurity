@@ -169,12 +169,38 @@ namespace green::impurity {
     return std::make_pair(compute_hyb_fun(freqs, res, bath_structure, ns, nio), res);
   }
 
+  std::pair<ztensor<4>, dtensor<2>> fit_bath_esprit(const ztensor<1>& freqs, const ztensor<4>& hyb_fun,
+                                                  const itensor<1>& bath_structure, double freq_cutoff);
+
   std::pair<ztensor<4>, dtensor<2>> minimize(const ztensor<1>& freqs, const ztensor<4>& hyb_fun,
                                               const dtensor<2>& initial_guess, const itensor<1>& bath_structure,
                                               double freq_cutoff, bath_fitting_method method) {
+    const auto [nw, ns, rows, cols] = hyb_fun.shape();
+    double max_off_diagonal = 0;
+    double off_diagonal_norm = 0;
+    size_t off_diagonal_count = 0;
+    for (size_t iw = 0; iw < nw; ++iw) {
+      for (size_t spin = 0; spin < ns; ++spin) {
+        for (size_t row = 0; row < rows; ++row) {
+          for (size_t col = 0; col < cols; ++col) {
+            if (row == col) continue;
+            const double magnitude = std::abs(hyb_fun(iw, spin, row, col));
+            max_off_diagonal = std::max(max_off_diagonal, magnitude);
+            off_diagonal_norm = std::hypot(off_diagonal_norm, magnitude);
+            ++off_diagonal_count;
+          }
+        }
+      }
+    }
+    const double rms = off_diagonal_norm / std::sqrt(std::max(size_t{1}, off_diagonal_count));
+    std::cout << "DIAGONAL-ONLY BATH FITTER: all off-diagonal hybridization entries are ignored. "
+              << "Ignored input across all frequencies and spins: max |Delta_ij| = " << max_off_diagonal
+              << ", RMS |Delta_ij| = " << rms << " (" << off_diagonal_count << " entries)" << std::endl;
+
     switch (method) {
       case NORM_L1:
       case NORM_LINF:     return minimize_scalar(freqs, hyb_fun, initial_guess, bath_structure, freq_cutoff, method);
+      case ESPRIT:       return fit_bath_esprit(freqs, hyb_fun, bath_structure, freq_cutoff);
       case NORM_L2_TRAPZ: return minimize_jacobian(freqs, hyb_fun, initial_guess, bath_structure, freq_cutoff);
       default:            return minimize_jacobian(freqs, hyb_fun, initial_guess, bath_structure, freq_cutoff);
     }

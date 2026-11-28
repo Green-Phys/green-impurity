@@ -23,6 +23,7 @@
 #include "green/impurity/impurity_solver.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/catch_session.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
 
@@ -60,7 +61,8 @@ namespace green::impurity {
 }
 
 void impurity_solver_test(std::string impurity_solver_type, std::string dc_data_prefix = "",
-                          std::string impurity_solver_exec = TRUE_EXECUTABLE, std::string impurity_solver_params = "") {
+                          std::string impurity_solver_exec = TRUE_EXECUTABLE, std::string impurity_solver_params = "",
+                          std::string bath_fitting_method = "NORM_L2_TRAPZ") {
   std::string test_file   = TEST_PATH + "/data.h5"s;
   std::string bath_file   = TEST_PATH + "/bath.txt"s;
   std::string input_file   = TEST_PATH + "/transform.h5"s;
@@ -83,7 +85,8 @@ void impurity_solver_test(std::string impurity_solver_type, std::string dc_data_
     p.define<std::string>("itermax", "", "1");
   }
 
-  p.parse("test --BETA 100 --grid_file " + grid_file + " --input_file " + weak_input_file );
+  p.parse("test --BETA 100 --grid_file " + grid_file + " --input_file " + weak_input_file +
+          " --bath_fitting_method " + bath_fitting_method);
 
   green::grids::transformer_t ft(p);
   green::impurity::bz_utils_t bz_utils(p);
@@ -140,7 +143,9 @@ TEST_CASE("Impurity Solver") {
     // ED_FAKE_EXECUTABLE is a tiny helper (test/ed_test.cpp) that writes
     // zero-valued results/Sigma_{inf_ij,ij} so the solver's post-run read
     // succeeds and the full solver code path is exercised.
-    impurity_solver_test("ED", "", ED_FAKE_EXECUTABLE);
+    const auto method = GENERATE("NORM_L2_TRAPZ", "ESPRIT");
+    CAPTURE(method);
+    impurity_solver_test("ED", "", ED_FAKE_EXECUTABLE, "", method);
     // Verify that ed.{imp}.input.h5 was written with correct structure.
     // nb=8 for imp 0 (bath_structure=[4,4]), nb=4 for imp 1 (bath_structure=[2,2]), nio=2 for both.
     const std::array<size_t, 2> expected_nb = {8, 4};
@@ -341,7 +346,9 @@ TEST_CASE("Impurity Solver") {
       }
     }
 
-    impurity_solver_test("GW", dc_prefix);
+    const auto method = GENERATE("NORM_L2_TRAPZ", "ESPRIT");
+    CAPTURE(method);
+    impurity_solver_test("GW", dc_prefix, TRUE_EXECUTABLE, "", method);
 
     // Verify that gw.{imp}.input.h5 and gw.{imp}.sim.h5 were written for each impurity.
     // nao_eff = nio + nb: imp 0 has nb=8 -> nao_eff=10; imp 1 has nb=4 -> nao_eff=6.
