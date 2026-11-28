@@ -206,14 +206,14 @@ namespace green::impurity {
 
   /**
    * For a given Hybridization function defined on Matsubara frequency grid find discrete approximation and
-   * corresponding bath parameters using Gauss-Newton method
+   * corresponding bath parameters
    *
    * @param freqs Matsubara frequency grid
    * @param hyb_fun Hybridization function on Matsubara frequencies to be minimized
-   * @param initial_guess initial guess for bath parameters
+   * @param initial_guess initial guess for bath parameters (ignored by ESPRIT)
    * @param bath_structure 1d array with numbers of bath sites for each orbitals
    * @param freq_cutoff frequency cutoff; frequencies with |ω_imag| > cutoff are excluded. Negative disables cutoff.
-   * @param method residual norm: NORM_L2_TRAPZ (default), NORM_L1, or NORM_LINF
+   * @param method NORM_L2_TRAPZ (default), NORM_L1, NORM_LINF, or ESPRIT
    * @return Discretized approximation of the Hybridization function and corresponding bath parameters
    */
   std::pair<ztensor<4>, dtensor<2>> minimize(const ztensor<1>& freqs, const ztensor<4>& hyb_fun,

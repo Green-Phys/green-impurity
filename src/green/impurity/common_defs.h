@@ -18,12 +18,12 @@ namespace green::impurity {
   enum class impurity_solver_type { ED, INCHWORM, GW };
 
   /**
-   * Bath fitting residual norm selection:
+   * Bath fitting method selection:
    *   NORM_L1       — sum of absolute residuals (scalar cost, numerical Jacobian)
    *   NORM_LINF     — max absolute residual (scalar cost, numerical Jacobian)
    *   NORM_L2_TRAPZ — weighted least-squares with trapezoidal quadrature and analytical Jacobian
    */
-  enum bath_fitting_method { NORM_L1, NORM_LINF, NORM_L2_TRAPZ };
+  enum bath_fitting_method { NORM_L1, NORM_LINF, NORM_L2_TRAPZ, ESPRIT };
 
   inline impurity_solver_type parse_impurity_solver_type(const std::string& s) {
     if (s == "ED") return impurity_solver_type::ED;
@@ -75,10 +75,11 @@ namespace green::impurity {
     p.define<std::string>("impurity_solver_exec", "Path to an impurity solver executable.");
     p.define<std::string>("impurity_solver_params", "Impurity solver parameters.");
     p.define<bath_fitting_method>("bath_fitting_method",
-                                 "Residual norm for bath fitting: "
+                                 "Method for bath fitting: "
                                  "NORM_L2_TRAPZ (per-frequency least-squares with analytical Jacobian and trapezoidal weighting), "
                                  "NORM_L1 (sum of absolute residuals), "
-                                 "NORM_LINF (max absolute residual)",
+                                 "NORM_LINF (max absolute residual), "
+                                 "ESPRIT (real-frequency pole extraction with nonnegative residues)",
                                  NORM_L2_TRAPZ);
     p.define<double>("bath_fitting_freq_cutoff",
                      "Frequency cutoff for bath fitting. Frequencies with |omega_imag| > cutoff are excluded. "

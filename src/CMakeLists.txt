@@ -1,5 +1,6 @@
 add_library(impurity
     bath_fitting.cpp
+    bath_fitting_esprit.cpp
     ed_impurity_solver.cpp
     inchworm_impurity_solver.cpp
     gw_impurity_solver.cpp
