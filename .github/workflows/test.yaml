@@ -50,6 +50,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Install lcov
         run: sudo apt-get update && sudo apt-get install -y lcov
 
@@ -61,14 +63,9 @@ jobs:
 
       - name: Run coverage
         run: |
-          cd build;
-          lcov --capture --directory . --output-file coverage.info --ignore-errors source;
-          lcov --remove coverage.info '/usr/*' --output-file coverage.info --ignore-errors unused
-          lcov --remove coverage.info '/opt/ohpc/pub/compiler/*' --output-file coverage.info --ignore-errors unused
-          lcov --remove coverage.info '*_deps*' --output-file coverage.info --ignore-errors unused
-          lcov --remove coverage.info '*deps*' --output-file coverage.info --ignore-errors unused
-          lcov --remove coverage.info '*libs*' --output-file coverage.info --ignore-errors unused
-          lcov --list coverage.info
+          lcov --capture --directory build --output-file build/coverage.info \
+            --include "$GITHUB_WORKSPACE/src/*" --include "$GITHUB_WORKSPACE/test/*"
+          lcov --list build/coverage.info
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v3
