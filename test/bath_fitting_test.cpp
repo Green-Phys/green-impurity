@@ -367,7 +367,46 @@ bool test_noise_stability_for_bath_fitting(green::impurity::bath_fitting_method 
 }
 
 TEST_CASE("New Bath Fitting Stability: Jacobian + Trapezoidal") {
-  REQUIRE(test_noise_stability_for_bath_fitting(green::impurity::NORM_L2_TRAPZ));
+  const size_t nw = 100;
+  const size_t nk = 4;
+  const double beta = 10.0;
+  const double noise_amplitude = 1e-10;
+  const double tolerance = 1e-8;
+
+  ztensor<1> freqs(nw);
+  for (size_t iw = 0; iw < nw; ++iw) {
+    const double n = static_cast<double>(iw) - nw / 2;
+    freqs(iw) = std::complex<double>(0.0, (2.0 * n + 1.0) * M_PI / beta);
+  }
+
+  // All four poles have distinct energies and appreciable spectral weight.
+  itensor<1> bath_structure(1);
+  bath_structure(0) = nk;
+  const double couplings[nk] = {0.19, 0.25, 0.30, 0.35};
+  const double energies[nk] = {-2.3, -0.8, 0.55, 1.8};
+  ztensor<4> clean(nw, 1, 1, 1);
+  ztensor<4> noisy(nw, 1, 1, 1);
+  for (size_t iw = 0; iw < nw; ++iw) {
+    std::complex<double> expected = 0.0;
+    for (size_t k = 0; k < nk; ++k) {
+      expected += (couplings[k] * couplings[k]) / (freqs(iw) - energies[k]);
+    }
+    clean(iw, 0, 0, 0) = expected;
+    // Deterministic complex perturbations avoid library-specific RNG distributions.
+    noisy(iw, 0, 0, 0) = expected + noise_amplitude * std::complex<double>(std::sin(iw + 1.0), std::cos(2.0 * iw + 1.0));
+  }
+
+  dtensor<2> initial_guess(1, 2 * nk);
+  initial_guess.set_zero();
+  const auto clean_fit = green::impurity::minimize(freqs, clean, initial_guess, bath_structure).first;
+  const auto noisy_fit = green::impurity::minimize(freqs, noisy, initial_guess, bath_structure).first;
+
+  for (size_t iw = 0; iw < nw; ++iw) {
+    CAPTURE(iw);
+    REQUIRE(std::abs(clean_fit(iw, 0, 0, 0) - clean(iw, 0, 0, 0)) < tolerance);
+    REQUIRE(std::abs(noisy_fit(iw, 0, 0, 0) - clean(iw, 0, 0, 0)) < tolerance);
+    REQUIRE(std::abs(clean_fit(iw, 0, 0, 0) - noisy_fit(iw, 0, 0, 0)) < tolerance);
+  }
 }
 
 TEST_CASE("Legacy Bath Fitting Stability: Scalar + norm", "[.][legacy bath fitting][sensitive to noise]") {
